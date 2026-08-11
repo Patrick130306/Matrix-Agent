@@ -61,23 +61,7 @@ AI-Native 浏览器集群 —— 把「指纹浏览器」和「AI Agent」合二
 - 一个 OpenAI 兼容 API Key（应用内「设置」页配置）
 
 ### 安装与运行
-
-```bash
-npm install        # postinstall 自动拉取 better-sqlite3 的 Electron ABI 预编译二进制
-npm run dev        # 开发模式（electron-vite，带 HMR）
-```
-
-### 常用命令
-
-```bash
-npm run typecheck  # TypeScript 类型检查
-npm run build      # 构建产物到 dist/
-npm run dist       # 打包 Windows 安装包（见 PACKAGING.md，有坑，先读再打）
-```
-
-### 打包
-
-Windows NSIS 安装包打包流程、镜像配置、已踩过的坑（node-gyp / GitHub 下载失败 / 缓存灌注），**详见 [PACKAGING.md](PACKAGING.md)**。产物：`release/Matrix Agent Setup 0.1.0.exe`。
+- 下载并运行releases中的安装包
 
 ## 使用指南
 
