@@ -1,0 +1,22 @@
+{
+  "appId": "com.matrixagent.app",
+  "productName": "Matrix Agent",
+  "asar": true,
+  "asarUnpack": ["**/node_modules/better-sqlite3/**"],
+  "npmRebuild": false,
+  "files": ["dist/**", "package.json"],
+  "directories": { "output": "release", "buildResources": "build" },
+  "win": {
+    "target": ["nsis"],
+    "icon": "build/icon.png"
+  },
+  "mac": {
+    "target": ["dmg"],
+    "category": "public.app-category.productivity"
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "shortcutName": "Matrix Agent"
+  }
+}
