@@ -1,0 +1,40 @@
+{
+  "name": "matrix-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Matrix Agent —— AI-Native 浏览器集群（MVP v2.0）",
+  "main": "dist/main/index.js",
+  "author": "Matrix Agent",
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit",
+    "dist": "electron-vite build && electron-builder",
+    "postinstall": "node scripts/rebuild-native.mjs"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.4.1",
+    "jsonrepair": "^3.13.0",
+    "playwright-core": "^1.54.0",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.15.0",
+    "@types/react": "^18.3.20",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^5.0.0",
+    "autoprefixer": "^10.4.21",
+    "electron": "^36.4.0",
+    "electron-builder": "^26.0.12",
+    "electron-vite": "^4.0.0",
+    "postcss": "^8.5.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.8.3",
+    "vite": "^7.0.0"
+  }
+}
