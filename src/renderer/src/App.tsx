@@ -93,7 +93,7 @@ export default function App() {
           ))}
         </ul>
         <div className="border-t border-ink-600 px-5 py-3 text-xs leading-4 text-slate-600">
-          MVP v2.0 · 指纹浏览器 × AI Agent
+          MVP v3.0 · 指纹浏览器 × AI Agent
         </div>
       </nav>
 

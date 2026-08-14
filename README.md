@@ -4,7 +4,7 @@ AI-Native 浏览器集群 —— 把「指纹浏览器」和「AI Agent」合二
 
 用自然语言下达任务，AI 自主调度多个相互隔离的指纹浏览器实例完成工作：多账号矩阵运营、数据采集、定时巡检……任务完成后每一步都有截图与推理留痕，遇到验证码自动暂停交真人处理。
 
-> MVP v2.0 · 基于 Electron + React + Playwright-core + better-sqlite3
+> MVP v3.0 · 基于 Electron + React + Playwright-core + better-sqlite3
 
 ## 功能一览
 
