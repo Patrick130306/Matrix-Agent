@@ -4,6 +4,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { EVT, IPC } from '@shared/constants';
 import type {
+  ExtractTemplate,
   Flow,
   GeoFingerprintSuggestion,
   HumanConfirmChoice,
@@ -15,6 +16,7 @@ import type {
   ProfileGroup,
   ProfileInput,
   ProxyCheckResult,
+  ProxyPoolEntry,
   ProxyType,
   Schedule,
   ScheduleInput,
@@ -83,6 +85,22 @@ const api = {
     list: () => invoke<Flow[]>(IPC.flowsList),
     run: (flowId: string, profileId: string) => invoke<Task>(IPC.flowsRun, flowId, profileId),
     delete: (id: string) => invoke(IPC.flowsDelete, id),
+    update: (id: string, patch: { name?: string; steps?: unknown[] }) => invoke<Flow>(IPC.flowsUpdate, id, patch),
+  },
+  proxyPool: {
+    list: () => invoke<ProxyPoolEntry[]>(IPC.proxyPoolList),
+    add: (text: string) =>
+      invoke<{ added: number; skipped: number; skippedSamples: string[] }>(IPC.proxyPoolAdd, text),
+    delete: (id: string) => invoke(IPC.proxyPoolDelete, id),
+    clear: () => invoke<{ ok: boolean; cleared: number }>(IPC.proxyPoolClear),
+    checkAll: () =>
+      invoke<{ ok: number; fail: number; total: number; list: ProxyPoolEntry[] }>(IPC.proxyPoolCheckAll),
+  },
+  extractTemplates: {
+    list: () => invoke<ExtractTemplate[]>(IPC.extractTemplatesList),
+    create: (input: { name: string; category: string; fields: string[]; instruction: string }) =>
+      invoke<ExtractTemplate>(IPC.extractTemplatesCreate, input),
+    delete: (id: string) => invoke(IPC.extractTemplatesDelete, id),
   },
   tasks: {
     create: (input: {

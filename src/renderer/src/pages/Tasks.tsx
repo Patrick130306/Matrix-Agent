@@ -134,7 +134,7 @@ export function TasksPage(props: { tasks: TaskRow[]; profiles: Profile[]; refres
           </thead>
           <tbody>
             {filtered.map((t) => (
-              <tr key={t.id} className="border-b border-white/5 transition-colors last:border-0 hover:bg-white/[0.03]">
+              <tr key={t.id} className="border-b border-[var(--line-1)] transition-colors last:border-0 hover:bg-[var(--fill-0)]">
                 <td className="max-w-md truncate px-4 py-3 text-sm text-slate-200">
                   {t.type === 'batch' && (
                     <span className="mr-1.5 rounded bg-info-soft px-1.5 py-0.5 text-[11px] font-medium text-info">
@@ -204,11 +204,11 @@ export function TasksPage(props: { tasks: TaskRow[]; profiles: Profile[]; refres
                 <video
                   controls
                   src={`media://recording/${detail.recordingFile}`}
-                  className="max-h-80 w-full rounded-[10px] border border-ink-600 bg-black/40"
+                  className="max-h-80 w-full rounded-[10px] border border-ink-600 bg-[var(--mask-strong)]"
                 />
               </div>
             )}
-            <div className="max-h-80 space-y-1.5 overflow-auto rounded-[10px] bg-black/30 p-3 font-mono text-xs leading-5">
+            <div className="max-h-80 space-y-1.5 overflow-auto rounded-[10px] bg-[var(--mask-strong)] p-3 font-mono text-xs leading-5">
               {(detail.steps ?? []).map((s) => (
                 <div key={s.id} className="flex items-start gap-2">
                   <span className="shrink-0 text-slate-600">#{s.seq}</span>
@@ -236,7 +236,7 @@ export function TasksPage(props: { tasks: TaskRow[]; profiles: Profile[]; refres
                 {props.tasks
                   .filter((c) => c.parentId === detail.id)
                   .map((c) => (
-                    <div key={c.id} className="flex items-center gap-2 rounded-[10px] bg-white/[0.04] px-3 py-2 text-xs">
+                    <div key={c.id} className="flex items-center gap-2 rounded-[10px] bg-[var(--fill-1)] px-3 py-2 text-xs">
                       <StatusBadge status={c.status} />
                       <span className="text-slate-300">{profileName(c.profileId)}</span>
                       <span className="truncate text-slate-500">
@@ -263,7 +263,7 @@ export function TasksPage(props: { tasks: TaskRow[]; profiles: Profile[]; refres
 
       {snapshot && (
         <Modal title="页面快照" onClose={() => setSnapshot(null)} wide>
-          <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap rounded-[10px] bg-black/30 p-3 font-mono text-xs leading-5 text-slate-300">
+          <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap rounded-[10px] bg-[var(--mask-strong)] p-3 font-mono text-xs leading-5 text-slate-300">
             {snapshot.content}
           </pre>
         </Modal>
@@ -360,7 +360,7 @@ function CollectResultView(props: { final: string }) {
       <div className="max-h-72 overflow-auto rounded-lg">
         <table className="w-full text-xs">
           <thead>
-            <tr className="border-b border-white/10 text-left">
+            <tr className="border-b border-[var(--line-2)] text-left">
               {columns.map((c) => (
                 <th key={c} className="px-2 py-1.5 font-medium text-slate-400">
                   {c}
@@ -370,7 +370,7 @@ function CollectResultView(props: { final: string }) {
           </thead>
           <tbody>
             {rows.map((r, i) => (
-              <tr key={i} className="border-b border-white/5 last:border-0">
+              <tr key={i} className="border-b border-[var(--line-1)] last:border-0">
                 {columns.map((c) => (
                   <td key={c} className="max-w-52 truncate px-2 py-1.5 text-slate-300" title={String(r[c] ?? '')}>
                     {String(r[c] ?? '')}

@@ -16,11 +16,11 @@ const BTN_SIZE: Record<ButtonSize, string> = {
 const BTN_ICON_SIZE: Record<ButtonSize, number> = { sm: 16, md: 18, lg: 20 };
 
 const BTN_VARIANT: Record<ButtonVariant, string> = {
-  primary: 'bg-[rgba(255,255,255,0.88)] text-[#121212] hover:bg-white',
-  secondary: 'bg-white/5 text-slate-200 hover:bg-white/10',
-  ghost: 'bg-white/5 text-slate-200 hover:bg-white/10', // 兼容旧调用
-  outline: 'border border-ink-600 bg-transparent text-slate-200 hover:bg-white/5',
-  danger: 'bg-danger-soft text-danger hover:bg-[rgba(255,71,86,0.22)]',
+  primary: 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-fg)] hover:opacity-90',
+  secondary: 'bg-[var(--fill-1)] text-slate-200 hover:bg-[var(--fill-2)]',
+  ghost: 'bg-[var(--fill-1)] text-slate-200 hover:bg-[var(--fill-2)]', // 兼容旧调用
+  outline: 'border border-ink-600 bg-transparent text-slate-200 hover:bg-[var(--fill-1)]',
+  danger: 'bg-danger-soft text-danger hover:bg-[var(--danger-soft-strong)]',
 };
 
 export function Button(props: {
@@ -70,7 +70,7 @@ export function IconButton(props: {
       className={`inline-flex h-[26px] w-[26px] items-center justify-center rounded-md transition-[background-color,color,transform] duration-150 ease-out active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 ${
         props.danger
           ? 'text-slate-400 hover:bg-danger-soft hover:text-danger'
-          : 'text-slate-400 hover:bg-white/10 hover:text-slate-200'
+          : 'text-slate-400 hover:bg-[var(--fill-2)] hover:text-slate-200'
       } ${props.className ?? ''}`}
     >
       <Icon name={props.name} size={props.size ?? 16} />
@@ -105,7 +105,7 @@ export function PageHeader(props: { title: string; desc?: string; extra?: ReactN
 /* ================= StatusBadge（任务状态徽章，语义色） ================= */
 
 const STATUS_STYLE: Record<TaskStatus, { label: string; cls: string }> = {
-  pending: { label: '排队中', cls: 'bg-white/10 text-slate-400' },
+  pending: { label: '排队中', cls: 'bg-[var(--fill-2)] text-slate-400' },
   running: { label: '运行中', cls: 'bg-info-soft text-info' },
   paused: { label: '等待人工', cls: 'bg-warn-soft text-warn' },
   interrupted: { label: '已中断', cls: 'bg-violet-soft text-violet' },
@@ -136,7 +136,7 @@ export function Field(props: { label: string; children: ReactNode; hint?: string
 }
 
 export const inputCls =
-  'w-full rounded-xl border border-transparent bg-white/5 px-3 py-2.5 text-sm leading-5 text-slate-200 placeholder:text-slate-500 transition-colors duration-150 hover:bg-white/[0.07] focus:border-ink-600 focus:bg-white/[0.07] focus:outline-none disabled:opacity-50';
+  'w-full rounded-xl border border-transparent bg-[var(--fill-1)] px-3 py-2.5 text-sm leading-5 text-slate-200 placeholder:text-slate-500 transition-colors duration-150 hover:bg-[var(--fill-1)] focus:border-ink-600 focus:bg-[var(--fill-1)] focus:outline-none disabled:opacity-50';
 
 /* ================= Modal（z-800/810，150-200ms ease-out 入场） ================= */
 
@@ -157,7 +157,7 @@ export function Modal(props: {
 
   return (
     <div
-      className="fixed inset-0 z-[800] flex items-center justify-center bg-black/60 p-6 animate-fade-in"
+      className="fixed inset-0 z-[800] flex items-center justify-center bg-[var(--mask)] p-6 animate-fade-in"
       onClick={props.onClose}
     >
       <div
@@ -200,12 +200,12 @@ export function Toggle(props: {
       onClick={() => props.onChange(!props.checked)}
       className={`relative shrink-0 rounded-full transition-colors duration-150 ease-out disabled:cursor-not-allowed disabled:opacity-40 ${
         lg ? 'h-6 w-11' : 'h-[18px] w-8'
-      } ${props.checked ? 'bg-[rgba(255,255,255,0.84)]' : 'bg-white/[0.18] hover:bg-white/[0.24]'}`}
+      } ${props.checked ? 'bg-[var(--toggle-on-bg)]' : 'bg-[var(--fill-3)] hover:bg-[var(--ink-500)]'}`}
     >
       <span
         className={`absolute left-[2px] top-[2px] rounded-full transition-transform duration-200 ease-out ${
           lg ? 'h-5 w-5' : 'h-[14px] w-[14px]'
-        } ${props.checked ? 'bg-[#121212]' : 'bg-white'}`}
+        } ${props.checked ? 'bg-[var(--toggle-on-knob)]' : 'bg-[var(--knob-off)]'}`}
         style={{
           transform: props.checked ? `translateX(${lg ? 20 : 14}px)` : 'translateX(0)',
         }}
@@ -233,8 +233,8 @@ export function CheckCircle(props: {
       onClick={() => props.onChange?.(!props.checked)}
       className={`inline-flex shrink-0 items-center justify-center rounded-full transition-colors duration-150 ease-out disabled:cursor-not-allowed disabled:opacity-40 ${
         props.checked
-          ? 'bg-[rgba(255,255,255,0.88)]'
-          : 'border-[1.8px] border-white/25 bg-transparent hover:border-white/45'
+          ? 'bg-[var(--check-on-bg)]'
+          : 'border-[1.8px] border-[var(--line-2)] bg-transparent hover:border-[var(--ink-500)]'
       } ${props.className ?? ''}`}
       style={{ width: s, height: s }}
     >
@@ -242,7 +242,7 @@ export function CheckCircle(props: {
         <svg width={s * 0.6} height={s * 0.6} viewBox="0 0 12 12" fill="none">
           <path
             d="M2.2 6.2L4.8 8.8L9.8 3.4"
-            stroke="#121212"
+            style={{ stroke: 'var(--check-on-fg)' }}
             strokeWidth="2.2"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -262,7 +262,7 @@ export function Segmented<T extends string>(props: {
   className?: string;
 }) {
   return (
-    <div className={`inline-flex items-center gap-0.5 rounded-[10px] bg-white/5 p-[3px] ${props.className ?? ''}`}>
+    <div className={`inline-flex items-center gap-0.5 rounded-[10px] bg-[var(--fill-1)] p-[3px] ${props.className ?? ''}`}>
       {props.options.map((o) => (
         <button
           key={o.value}
@@ -284,7 +284,7 @@ export function Segmented<T extends string>(props: {
 export function EmptyState(props: { icon: IconName; title: string; hint?: string; action?: ReactNode }) {
   return (
     <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
-      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/5 text-slate-500">
+      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--fill-1)] text-slate-500">
         <Icon name={props.icon} size={24} />
       </div>
       <p className="mt-4 text-sm font-medium text-slate-300">{props.title}</p>

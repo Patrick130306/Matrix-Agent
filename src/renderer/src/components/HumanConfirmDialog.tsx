@@ -25,7 +25,7 @@ export function HumanConfirmDialog() {
   };
 
   return (
-    <div className="fixed inset-0 z-[900] flex items-center justify-center bg-black/70 p-6 animate-fade-in">
+    <div className="fixed inset-0 z-[900] flex items-center justify-center bg-[var(--mask)] p-6 animate-fade-in">
       <div
         role="alertdialog"
         aria-modal="true"
@@ -41,7 +41,7 @@ export function HumanConfirmDialog() {
         </div>
 
         <div className="flex-1 space-y-4 overflow-auto p-6">
-          <div className="rounded-[10px] bg-white/[0.04] p-3.5 text-sm leading-6 text-slate-200">
+          <div className="rounded-[10px] bg-[var(--fill-1)] p-3.5 text-sm leading-6 text-slate-200">
             {current.reason}
           </div>
 
@@ -58,7 +58,7 @@ export function HumanConfirmDialog() {
               <p className="mb-1.5 text-xs text-slate-500">Agent 最近的动作：</p>
               <ul className="space-y-1 text-xs text-slate-400">
                 {current.recentActions.map((a, i) => (
-                  <li key={i} className="rounded-md bg-black/30 px-2.5 py-1.5 font-mono">
+                  <li key={i} className="rounded-md bg-[var(--mask-strong)] px-2.5 py-1.5 font-mono">
                     {a.description}
                   </li>
                 ))}

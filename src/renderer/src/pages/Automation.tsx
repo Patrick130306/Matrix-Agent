@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import type { Flow, Profile, Schedule, ScheduleInput, TaskTemplate } from '@shared/types';
+import type { ExtractTemplate, Flow, FlowStep, Profile, Schedule, ScheduleInput, TaskTemplate } from '@shared/types';
 import { matrix } from '../api';
 import { Button, Card, CheckCircle, EmptyState, Field, IconButton, Modal, PageHeader, Toggle, inputCls } from '../components/ui';
-import { confirmDialog, toast } from '../components/feedback';
+import { confirmDialog, promptDialog, toast } from '../components/feedback';
 
-/** 自动化页：定时任务 + 流程复用（秒级回放）+ 结构化采集 + 任务模板。 */
+/** 自动化页：定时任务 + 流程复用（秒级回放 / 可视化编辑）+ 结构化采集 + 任务模板。 */
 export function AutomationPage(props: { profiles: Profile[] }) {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [templates, setTemplates] = useState<TaskTemplate[]>([]);
   const [flows, setFlows] = useState<Flow[]>([]);
   const [editing, setEditing] = useState(false);
   const [runFlowFor, setRunFlowFor] = useState<Flow | null>(null);
+  const [editFlowFor, setEditFlowFor] = useState<Flow | null>(null);
   const [collectOpen, setCollectOpen] = useState(false);
 
   const refresh = useCallback(() => {
@@ -73,7 +74,7 @@ export function AutomationPage(props: { profiles: Profile[] }) {
               </thead>
               <tbody>
                 {schedules.map((s) => (
-                  <tr key={s.id} className="border-b border-white/5 transition-colors last:border-0 hover:bg-white/[0.03]">
+                  <tr key={s.id} className="border-b border-[var(--line-1)] transition-colors last:border-0 hover:bg-[var(--fill-0)]">
                     <td className="max-w-52 truncate px-4 py-3 text-sm text-slate-200" title={s.instruction}>
                       {s.name}
                     </td>
@@ -129,6 +130,9 @@ export function AutomationPage(props: { profiles: Profile[] }) {
                   <div className="flex items-center gap-1.5">
                     <Button size="sm" variant="primary" leftIcon="Play" onClick={() => setRunFlowFor(f)}>
                       回放
+                    </Button>
+                    <Button size="sm" variant="outline" leftIcon="Edit" onClick={() => setEditFlowFor(f)}>
+                      编辑
                     </Button>
                     <IconButton name="Delete" title="删除流程" danger onClick={() => void deleteFlow(f)} />
                   </div>
@@ -223,6 +227,17 @@ export function AutomationPage(props: { profiles: Profile[] }) {
         />
       )}
 
+      {editFlowFor && (
+        <FlowEditModal
+          flow={editFlowFor}
+          onClose={() => setEditFlowFor(null)}
+          onSaved={(f) => {
+            setEditFlowFor(null);
+            refresh();
+          }}
+        />
+      )}
+
       {collectOpen && (
         <CollectorModal profiles={props.profiles} onClose={() => setCollectOpen(false)} />
       )}
@@ -282,7 +297,7 @@ function FlowRunModal(props: { flow: Flow; profiles: Profile[]; onClose: () => v
       }
     >
       <div className="space-y-4">
-        <div className="max-h-40 space-y-1 overflow-auto rounded-[10px] bg-black/30 p-3 font-mono text-xs leading-5 text-slate-400">
+        <div className="max-h-40 space-y-1 overflow-auto rounded-[10px] bg-[var(--mask-strong)] p-3 font-mono text-xs leading-5 text-slate-400">
           {props.flow.steps.map((s, i) => (
             <p key={i}>
               <span className="text-slate-600">#{i + 1}</span> {s.note ?? s.action.type}
@@ -303,14 +318,249 @@ function FlowRunModal(props: { flow: Flow; profiles: Profile[]; onClose: () => v
   );
 }
 
+// ------------------------------------------------------------------ 流程可视化编辑
+
+/** 流程编辑器：查看/删除/调序/改参数（navigate url / type text / select value / wait ms） */
+function FlowEditModal(props: { flow: Flow; onClose: () => void; onSaved: (f: Flow) => void }) {
+  const [name, setName] = useState(props.flow.name);
+  const [steps, setSteps] = useState<FlowStep[]>(() => props.flow.steps.map((s) => ({ ...s, action: { ...s.action } })));
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const move = (idx: number, dir: -1 | 1) => {
+    setSteps((s) => {
+      const next = [...s];
+      const j = idx + dir;
+      if (j < 0 || j >= next.length) return s;
+      [next[idx], next[j]] = [next[j], next[idx]];
+      return next;
+    });
+  };
+
+  const remove = (idx: number) => {
+    setSteps((s) => s.filter((_, i) => i !== idx));
+    setEditingIdx(null);
+  };
+
+  /** 获取某步可编辑的参数字段（返回字段名 + 当前值） */
+  const editableField = (s: FlowStep): { key: string; value: string } | null => {
+    switch (s.action.type) {
+      case 'navigate':
+        return { key: 'url', value: s.action.url };
+      case 'type':
+        return { key: 'text', value: s.action.text };
+      case 'select':
+        return { key: 'value', value: s.action.value };
+      case 'wait':
+        return { key: 'ms', value: String(s.action.ms) };
+      default:
+        return null;
+    }
+  };
+
+  const startEdit = (idx: number) => {
+    const f = editableField(steps[idx]);
+    if (!f) return;
+    setEditingIdx(idx);
+    setEditValue(f.value);
+  };
+
+  const commitEdit = () => {
+    if (editingIdx === null) return;
+    setSteps((s) => {
+      const next = [...s];
+      const step = { ...next[editingIdx], action: { ...next[editingIdx].action } };
+      switch (step.action.type) {
+        case 'navigate':
+          step.action = { ...step.action, url: editValue.trim() };
+          break;
+        case 'type':
+          step.action = { ...step.action, text: editValue };
+          break;
+        case 'select':
+          step.action = { ...step.action, value: editValue };
+          break;
+        case 'wait':
+          step.action = { ...step.action, ms: Math.max(0, Number(editValue) || 0) };
+          break;
+      }
+      next[editingIdx] = step;
+      return next;
+    });
+    setEditingIdx(null);
+  };
+
+  const save = async () => {
+    if (steps.length === 0) {
+      toast.error('流程至少保留一步');
+      return;
+    }
+    setSaving(true);
+    try {
+      const f = await matrix.flows.update(props.flow.id, { name: name.trim() || props.flow.name, steps });
+      toast.success(`流程「${f.name}」已保存`);
+      props.onSaved(f);
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const actionDesc = (s: FlowStep): string => {
+    switch (s.action.type) {
+      case 'navigate':
+        return s.action.url;
+      case 'click':
+        return `点击元素`;
+      case 'type':
+        return `输入「${s.action.text.slice(0, 40)}」`;
+      case 'select':
+        return `选择「${s.action.value}」`;
+      case 'scroll':
+        return `滚动（${s.action.direction}）`;
+      case 'extract':
+        return `采集：${s.action.note}`;
+      case 'wait':
+        return `等待 ${s.action.ms}ms`;
+      default:
+        return s.action.type;
+    }
+  };
+
+  const typeLabel = (t: string) => {
+    const map: Record<string, string> = {
+      navigate: '导航',
+      click: '点击',
+      type: '输入',
+      select: '选择',
+      scroll: '滚动',
+      extract: '采集',
+      wait: '等待',
+    };
+    return map[t] ?? t;
+  };
+
+  return (
+    <Modal
+      title={`编辑流程：${props.flow.name}`}
+      onClose={props.onClose}
+      wide
+      footer={
+        <>
+          <Button onClick={props.onClose}>取消</Button>
+          <Button variant="primary" leftIcon="Save" disabled={saving} onClick={() => void save()}>
+            {saving ? '保存中…' : '保存'}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <Field label="流程名称">
+          <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <div>
+          <p className="mb-2 text-[13px] text-slate-400">
+            共 {steps.length} 步 · 点击「编辑」可改参数，拖到合适顺序后保存
+          </p>
+          <div className="max-h-96 space-y-1.5 overflow-auto rounded-[10px] bg-[var(--mask-strong)] p-3">
+            {steps.map((s, i) => {
+              const f = editableField(s);
+              return (
+                <div key={i} className="rounded-[10px] bg-[var(--fill-1)] px-3 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="shrink-0 font-mono text-xs text-slate-600">#{i + 1}</span>
+                    <span className="shrink-0 rounded bg-info-soft px-1.5 py-0.5 text-[11px] font-medium text-info">
+                      {typeLabel(s.action.type)}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-[13px] text-slate-300" title={s.note}>
+                      {s.note ?? actionDesc(s)}
+                    </span>
+                    <div className="flex shrink-0 items-center gap-0.5">
+                      {f && editingIdx !== i && (
+                        <Button size="sm" variant="outline" onClick={() => startEdit(i)}>
+                          编辑
+                        </Button>
+                      )}
+                      <IconButton name="Up" title="上移" onClick={() => move(i, -1)} disabled={i === 0} />
+                      <IconButton name="Down" title="下移" onClick={() => move(i, 1)} disabled={i === steps.length - 1} />
+                      <IconButton name="Delete" title="删除此步" danger onClick={() => void remove(i)} />
+                    </div>
+                  </div>
+                  {f && editingIdx === i && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <input
+                        className={`${inputCls} !py-1.5 font-mono text-xs`}
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') commitEdit();
+                          if (e.key === 'Escape') setEditingIdx(null);
+                        }}
+                      />
+                      <Button size="sm" variant="primary" onClick={commitEdit}>
+                        确定
+                      </Button>
+                      <Button size="sm" onClick={() => setEditingIdx(null)}>
+                        取消
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {steps.length === 0 && (
+              <p className="py-6 text-center text-xs text-slate-500">流程已为空（至少保留一步才能保存）</p>
+            )}
+          </div>
+        </div>
+        <p className="text-xs leading-4 text-slate-500">
+          提示：删除会永久移除该步骤；调序会改变执行顺序。保存后回放按新顺序执行。
+        </p>
+      </div>
+    </Modal>
+  );
+}
+
 // ------------------------------------------------------------------ 结构化采集
 
 function CollectorModal(props: { profiles: Profile[]; onClose: () => void }) {
+  const [templates, setTemplates] = useState<ExtractTemplate[]>([]);
   const [url, setUrl] = useState('');
   const [fields, setFields] = useState('');
+  const [extra, setExtra] = useState('');
   const [maxPages, setMaxPages] = useState(3);
   const [profileId, setProfileId] = useState(props.profiles[0]?.id ?? '');
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    void matrix.extractTemplates.list().then(setTemplates);
+  }, []);
+
+  /** 套用模板：填充字段 + 附加指令 */
+  const applyTemplate = (t: ExtractTemplate) => {
+    setFields(t.fields.join('、'));
+    setExtra(t.instruction);
+  };
+
+  const saveAsTemplate = async () => {
+    const fieldList = fields.split(/[,，、]/).map((s) => s.trim()).filter(Boolean);
+    if (fieldList.length === 0) {
+      toast.error('先填采集字段再存模板');
+      return;
+    }
+    const name = await promptDialog({ title: '存为采集模板', defaultValue: fieldList.join('/').slice(0, 20), placeholder: '模板名称' });
+    if (!name) return;
+    try {
+      await matrix.extractTemplates.create({ name, category: '自定义', fields: fieldList, instruction: extra });
+      setTemplates(await matrix.extractTemplates.list());
+      toast.success('模板已保存，下次一键套用');
+    } catch (err) {
+      toast.error((err as Error).message);
+    }
+  };
 
   const submit = async () => {
     const fieldList = fields.split(/[,，、]/).map((s) => s.trim()).filter(Boolean);
@@ -324,11 +574,11 @@ function CollectorModal(props: { profiles: Profile[]; onClose: () => void }) {
         `结构化采集任务。`,
         `1. 先 navigate 到起始页：${url.trim()}（必须带协议）`,
         `2. 用 extract 收集当前页面的列表数据：把每个条目整理为 JSON 对象，字段为【${fieldList.join('、')}】，多个条目组成 JSON 数组，note 写「ROWS 第N页」`,
-        `3. 找到并点击「下一页」继续采集；没有下一页或已采 ${maxPages} 页则结束`,
+        `3. ${extra.trim() || '找到并点击「下一页」继续采集'};没有下一页或已采 ${maxPages} 页则结束`,
         `4. 最后用 done 交付，result 写「共采集 N 条」（系统会自动合并各页数据为表格）`,
       ].join('\n');
       await matrix.tasks.create({
-        name: `[采集] ${url.trim().slice(0, 40)} · ${fieldList.join('/')}`,
+        name: instruction,
         requiresAuth: true,
         profileId: profileId || undefined,
         collectFields: fieldList,
@@ -349,6 +599,7 @@ function CollectorModal(props: { profiles: Profile[]; onClose: () => void }) {
       wide
       footer={
         <>
+          <Button variant="outline" leftIcon="Save" onClick={() => void saveAsTemplate()}>存为模板</Button>
           <Button onClick={props.onClose}>取消</Button>
           <Button variant="primary" disabled={submitting} onClick={() => void submit()}>
             {submitting ? '提交中…' : '开始采集'}
@@ -357,6 +608,23 @@ function CollectorModal(props: { profiles: Profile[]; onClose: () => void }) {
       }
     >
       <div className="space-y-4">
+        <Field label="套用模板（预置 + 自定义，选中即填充下方字段）">
+          <select
+            className={inputCls}
+            value=""
+            onChange={(e) => {
+              const t = templates.find((x) => x.id === e.target.value);
+              if (t) applyTemplate(t);
+            }}
+          >
+            <option value="">选择模板…</option>
+            {templates.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.category} · {t.name}（{t.fields.join('/')}）
+              </option>
+            ))}
+          </select>
+        </Field>
         <Field label="起始页 URL（列表页）">
           <input className={inputCls} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://shop.example.com/products" />
         </Field>
@@ -368,6 +636,9 @@ function CollectorModal(props: { profiles: Profile[]; onClose: () => void }) {
             <input type="number" min={1} max={20} className={inputCls} value={maxPages} onChange={(e) => setMaxPages(Math.max(1, Number(e.target.value)))} />
           </Field>
         </div>
+        <Field label="采集规则（翻页/筛选策略，可选）" hint="例如：只采销量 > 100 的商品；翻页按钮是「下一页」">
+          <textarea className={`${inputCls} h-16 resize-none`} value={extra} onChange={(e) => setExtra(e.target.value)} placeholder="按列表页逐条整理，翻页直到没有下一页" />
+        </Field>
         <Field label="使用 Profile">
           <select className={inputCls} value={profileId} onChange={(e) => setProfileId(e.target.value)}>
             {props.profiles.map((p) => (
@@ -477,7 +748,7 @@ function ScheduleForm(props: { profiles: Profile[]; onClose: () => void; onSaved
                 <button
                   key={p.id}
                   className={`h-7 rounded-lg px-2.5 text-[13px] transition-colors duration-150 ${
-                    on ? 'bg-accent-soft text-info' : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-slate-200'
+                    on ? 'bg-accent-soft text-info' : 'bg-[var(--fill-1)] text-slate-400 hover:bg-[var(--fill-2)] hover:text-slate-200'
                   }`}
                   onClick={() => toggle(p.id)}
                 >

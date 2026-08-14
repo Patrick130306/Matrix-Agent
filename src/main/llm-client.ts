@@ -15,6 +15,12 @@ export interface ChatMessage {
   content: string;
 }
 
+/** LLM 调用返回：内容 + token 用量（仪表盘成本估算用） */
+export interface ChatResult {
+  content: string;
+  usage: { promptTokens: number; completionTokens: number };
+}
+
 export class LLMError extends Error {
   constructor(
     message: string,
@@ -47,7 +53,7 @@ export class LLMClient {
     apiKey: string,
     messages: ChatMessage[],
     useJsonMode: boolean,
-  ): Promise<string> {
+  ): Promise<ChatResult> {
     const url = `${settings.llmBaseUrl.replace(/\/+$/, '')}/chat/completions`;
     const body: Record<string, unknown> = {
       model: settings.llmModel,
@@ -81,12 +87,19 @@ export class LLMClient {
 
     const data = (await res.json()) as {
       choices?: { message?: { content?: string } }[];
+      usage?: { prompt_tokens?: number; completion_tokens?: number };
     };
     const content = data.choices?.[0]?.message?.content;
     if (typeof content !== 'string' || content.length === 0) {
       throw new LLMError('LLM 返回了空内容');
     }
-    return content;
+    return {
+      content,
+      usage: {
+        promptTokens: data.usage?.prompt_tokens ?? 0,
+        completionTokens: data.usage?.completion_tokens ?? 0,
+      },
+    };
   }
 
   /** 带 JSON mode 探测缓存与 429 退避的对话调用。 */
@@ -94,7 +107,7 @@ export class LLMClient {
     settings: Pick<Settings, 'llmBaseUrl' | 'llmModel' | 'llmMaxTokens' | 'llmTemperature'>,
     apiKey: string,
     messages: ChatMessage[],
-  ): Promise<string> {
+  ): Promise<ChatResult> {
     return this.semaphore.use(async () => {
       const baseUrl = settings.llmBaseUrl;
       let useJsonMode = this.jsonModeSupport.get(baseUrl) !== false;
@@ -129,26 +142,30 @@ export class LLMClient {
    * §7.5 决策调用：JSON 三级兜底。
    * 解析失败时携带错误重试（最多 LLM_PARSE_MAX_RETRIES 次）；仍失败抛 LLMParseFailedError，
    * 由上层转 human_confirm，不直接判任务失败。
+   * 返回动作 + 本次决策累计的 token 用量（多次重试累加）。
    */
   async decideAction(
     settings: Pick<Settings, 'llmBaseUrl' | 'llmModel' | 'llmMaxTokens' | 'llmTemperature'>,
     apiKey: string,
     messages: ChatMessage[],
-  ): Promise<AgentAction[]> {
+  ): Promise<{ actions: AgentAction[]; usage: { promptTokens: number; completionTokens: number } }> {
     const history = [...messages];
     let lastRaw = '';
     let lastError = '';
+    const usage = { promptTokens: 0, completionTokens: 0 };
 
     for (let attempt = 0; attempt <= LLM_PARSE_MAX_RETRIES; attempt++) {
-      const raw = await this.chat(settings, apiKey, history);
-      lastRaw = raw;
-      const parsed = parseAction(raw);
-      if (parsed.ok && parsed.actions?.length) return parsed.actions;
+      const res = await this.chat(settings, apiKey, history);
+      lastRaw = res.content;
+      usage.promptTokens += res.usage.promptTokens;
+      usage.completionTokens += res.usage.completionTokens;
+      const parsed = parseAction(res.content);
+      if (parsed.ok && parsed.actions?.length) return { actions: parsed.actions, usage };
 
       lastError = parsed.error ?? '未知解析错误';
       // 第三级：原样回传非法输出 + 错误信息
-      history.push({ role: 'assistant', content: raw });
-      history.push({ role: 'user', content: buildRetryMessage(raw, lastError) });
+      history.push({ role: 'assistant', content: res.content });
+      history.push({ role: 'user', content: buildRetryMessage(res.content, lastError) });
     }
 
     throw new LLMParseFailedError(lastRaw);

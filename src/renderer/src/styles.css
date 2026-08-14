@@ -2,8 +2,117 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ================= 主题令牌（CSS 变量） =================
+   :root = 暗色（默认，与既有 UI 完全一致）
+   html.light = 亮色（设置 → 外观 切换）
+   所有 tailwind 颜色类都引用这些变量，两种主题下页面类名零改动。 */
+
 :root {
   color-scheme: dark;
+
+  /* 表面层级 */
+  --ink-950: #121212;
+  --ink-900: #161717;
+  --ink-800: #1f1f1f;
+  --ink-700: #292929;
+  --ink-600: rgba(255, 255, 255, 0.12);
+  --ink-500: rgba(255, 255, 255, 0.2);
+
+  /* 品牌/语义色 */
+  --accent: #1a88ff;
+  --accent-soft: rgba(26, 136, 255, 0.14);
+  --accent-hover: #3d9bff;
+  --ok: #16c456;
+  --ok-soft: rgba(22, 196, 86, 0.14);
+  --warn: #ff9f0a;
+  --warn-soft: rgba(255, 159, 10, 0.14);
+  --danger: #ff4756;
+  --danger-soft: rgba(255, 71, 86, 0.14);
+  --info: #1a88ff;
+  --info-soft: rgba(26, 136, 255, 0.14);
+  --violet: #a16bff;
+  --violet-soft: rgba(161, 107, 255, 0.14);
+
+  /* 文字层级 */
+  --slate-200: rgba(255, 255, 255, 0.84);
+  --slate-300: rgba(255, 255, 255, 0.68);
+  --slate-400: rgba(255, 255, 255, 0.56);
+  --slate-500: rgba(255, 255, 255, 0.42);
+  --slate-600: rgba(255, 255, 255, 0.26);
+
+  /* 通用填充/线/遮罩（替代硬编码 bg-white/x、border-white/x、bg-black/x） */
+  --fill-0: rgba(255, 255, 255, 0.03);
+  --fill-1: rgba(255, 255, 255, 0.05);
+  --fill-2: rgba(255, 255, 255, 0.1);
+  --fill-3: rgba(255, 255, 255, 0.2);
+  --line-1: rgba(255, 255, 255, 0.05);
+  --line-2: rgba(255, 255, 255, 0.1);
+  --mask-strong: rgba(0, 0, 0, 0.3);
+  --mask: rgba(0, 0, 0, 0.6);
+
+  /* 控件专色 */
+  --btn-primary-bg: rgba(255, 255, 255, 0.88);
+  --btn-primary-fg: #121212;
+  --toggle-on-bg: rgba(255, 255, 255, 0.84);
+  --toggle-on-knob: #121212;
+  --knob-off: #ffffff;
+  --check-on-bg: rgba(255, 255, 255, 0.88);
+  --check-on-fg: #121212;
+  --danger-soft-strong: rgba(255, 71, 86, 0.22);
+}
+
+html.light {
+  color-scheme: light;
+
+  /* 表面层级 */
+  --ink-950: #f3f4f6;
+  --ink-900: #ffffff;
+  --ink-800: #ffffff;
+  --ink-700: #fafafa;
+  --ink-600: rgba(15, 23, 42, 0.1);
+  --ink-500: rgba(15, 23, 42, 0.16);
+
+  /* 品牌/语义色（亮色下加深提对比度） */
+  --accent: #1a6ee0;
+  --accent-soft: rgba(26, 110, 224, 0.1);
+  --accent-hover: #1a7ef0;
+  --ok: #0e9f4c;
+  --ok-soft: rgba(14, 159, 76, 0.12);
+  --warn: #d97706;
+  --warn-soft: rgba(217, 119, 6, 0.12);
+  --danger: #dc2626;
+  --danger-soft: rgba(220, 38, 38, 0.1);
+  --info: #1a6ee0;
+  --info-soft: rgba(26, 110, 224, 0.1);
+  --violet: #7c3aed;
+  --violet-soft: rgba(124, 58, 237, 0.1);
+
+  /* 文字层级（深色文字） */
+  --slate-200: rgba(15, 23, 42, 0.92);
+  --slate-300: rgba(15, 23, 42, 0.78);
+  --slate-400: rgba(15, 23, 42, 0.6);
+  --slate-500: rgba(15, 23, 42, 0.45);
+  --slate-600: rgba(15, 23, 42, 0.3);
+
+  /* 填充/线/遮罩 → 深色半透明 */
+  --fill-0: rgba(15, 23, 42, 0.03);
+  --fill-1: rgba(15, 23, 42, 0.05);
+  --fill-2: rgba(15, 23, 42, 0.09);
+  --fill-3: rgba(15, 23, 42, 0.14);
+  --line-1: rgba(15, 23, 42, 0.07);
+  --line-2: rgba(15, 23, 42, 0.11);
+  --mask-strong: rgba(15, 23, 42, 0.04);
+  --mask: rgba(15, 23, 42, 0.45);
+
+  /* 控件专色（深底浅字反转为浅底深字） */
+  --btn-primary-bg: rgba(15, 23, 42, 0.92);
+  --btn-primary-fg: #ffffff;
+  --toggle-on-bg: var(--accent);
+  --toggle-on-knob: #ffffff;
+  --knob-off: rgba(15, 23, 42, 0.55);
+  --check-on-bg: var(--accent);
+  --check-on-fg: #ffffff;
+  --danger-soft-strong: rgba(220, 38, 38, 0.16);
 }
 
 html,
@@ -27,11 +136,11 @@ body {
   height: 8px;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--fill-3);
   border-radius: 999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.22);
+  background: var(--ink-500);
 }
 ::-webkit-scrollbar-track,
 ::-webkit-scrollbar-corner {
@@ -45,14 +154,14 @@ input[type='number']::-webkit-inner-spin-button {
   margin: 0;
 }
 
-/* 下拉框：弹出层选项用深底浅字（避免白底白字看不清） */
+/* 下拉框：弹出层选项跟随主题（避免白底白字/黑底黑字看不清） */
 select {
-  color-scheme: dark;
+  color-scheme: var(--scheme, dark);
 }
 select option,
 select optgroup {
-  background-color: #292929;
-  color: rgba(255, 255, 255, 0.84);
+  background-color: var(--ink-700);
+  color: var(--slate-200);
 }
 
 /* 键盘焦点环：用 outline，不产生位移 */

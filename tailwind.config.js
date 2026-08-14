@@ -1,6 +1,6 @@
 /** @type {import('tailwindcss').Config} */
-// 设计令牌对齐 Kimi Design System（暗色）。
-// 策略：保留旧类名 ink-*/slate-*，底层值整体替换为 Kimi token，页面类名改动最小。
+// 设计令牌对齐 Kimi Design System（暗色为默认；亮色通过 html.light 上的 CSS 变量切换）。
+// 策略：ink-*/slate-*/语义色全部走 CSS 变量，页面类名两种主题零改动。
 module.exports = {
   content: ['./src/renderer/index.html', './src/renderer/src/**/*.{ts,tsx}'],
   darkMode: 'class',
@@ -9,32 +9,32 @@ module.exports = {
       colors: {
         // —— 表面层级（background.* / separator / fills）——
         ink: {
-          950: '#121212', // 页面底 = background.primary
-          900: '#161717', // 侧栏 = background.groundPc
-          800: '#1f1f1f', // 卡片 / 浮起面 = background.secondary
-          700: '#292929', // 三级面 / 弹窗 = background.tertiary
-          600: 'rgba(255,255,255,0.12)', // 轻分隔线 = separator.s1（也作弱填充 fills.f2 用）
-          500: 'rgba(255,255,255,0.20)', // 略强分隔
+          950: 'var(--ink-950)', // 页面底 = background.primary
+          900: 'var(--ink-900)', // 侧栏 = background.groundPc
+          800: 'var(--ink-800)', // 卡片 / 浮起面 = background.secondary
+          700: 'var(--ink-700)', // 三级面 / 弹窗 = background.tertiary
+          600: 'var(--ink-600)', // 轻分隔线 = separator.s1（也作弱填充 fills.f2 用）
+          500: 'var(--ink-500)', // 略强分隔
         },
         accent: {
-          DEFAULT: '#1a88ff', // kimiBlue
-          soft: 'rgba(26,136,255,0.14)', // 弱蓝底
-          hover: '#3d9bff',
+          DEFAULT: 'var(--accent)',
+          soft: 'var(--accent-soft)',
+          hover: 'var(--accent-hover)',
         },
         // —— 文字层级 = labels.* ——
         slate: {
-          200: 'rgba(255,255,255,0.84)', // labels.primary
-          300: 'rgba(255,255,255,0.68)',
-          400: 'rgba(255,255,255,0.56)', // labels.secondary
-          500: 'rgba(255,255,255,0.42)', // labels.tertiary
-          600: 'rgba(255,255,255,0.26)', // labels.quaternary
+          200: 'var(--slate-200)',
+          300: 'var(--slate-300)',
+          400: 'var(--slate-400)',
+          500: 'var(--slate-500)',
+          600: 'var(--slate-600)',
         },
         // —— 语义色 = status.* ——
-        ok: { DEFAULT: '#16c456', soft: 'rgba(22,196,86,0.14)' },
-        warn: { DEFAULT: '#ff9f0a', soft: 'rgba(255,159,10,0.14)' },
-        danger: { DEFAULT: '#ff4756', soft: 'rgba(255,71,86,0.14)' },
-        info: { DEFAULT: '#1a88ff', soft: 'rgba(26,136,255,0.14)' },
-        violet: { DEFAULT: '#a16bff', soft: 'rgba(161,107,255,0.14)' },
+        ok: { DEFAULT: 'var(--ok)', soft: 'var(--ok-soft)' },
+        warn: { DEFAULT: 'var(--warn)', soft: 'var(--warn-soft)' },
+        danger: { DEFAULT: 'var(--danger)', soft: 'var(--danger-soft)' },
+        info: { DEFAULT: 'var(--info)', soft: 'var(--info-soft)' },
+        violet: { DEFAULT: 'var(--violet)', soft: 'var(--violet-soft)' },
       },
       fontFamily: {
         sans: ['"PingFang SC"', '"Microsoft YaHei"', 'system-ui', '-apple-system', '"Segoe UI"', 'sans-serif'],

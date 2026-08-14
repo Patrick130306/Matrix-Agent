@@ -9,7 +9,7 @@ interface TaskRow extends Task {
   steps?: TaskStep[];
 }
 
-/** 主窗口：任务输入 + 执行日志（§12 / §13 基础 UI）。 */
+/** 主窗口：任务输入 + 执行日志 + 统计条（§12 / §13 基础 UI）。 */
 export function Dashboard(props: { tasks: TaskRow[]; profiles: Profile[]; groups: ProfileGroup[]; refresh: () => void }) {
   // 任务列表与日志区联动：点击卡片 → 右侧显示完整历史
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -29,6 +29,7 @@ export function Dashboard(props: { tasks: TaskRow[]; profiles: Profile[]; groups
           ) : undefined
         }
       />
+      <StatsBar tasks={props.tasks} />
       <div className="grid grid-cols-5 gap-6">
         <div className="col-span-2 space-y-6">
           <TaskComposer profiles={props.profiles} groups={props.groups} onCreated={props.refresh} />
@@ -43,6 +44,52 @@ export function Dashboard(props: { tasks: TaskRow[]; profiles: Profile[]; groups
           <TaskLog tasks={props.tasks} selectedId={selectedId} onSelect={setSelectedId} />
         </div>
       </div>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------ 统计条（成功率 / 耗时 / LLM 成本）
+
+function StatsBar(props: { tasks: TaskRow[] }) {
+  const [pricePer1k, setPricePer1k] = useState(0);
+  useEffect(() => {
+    void matrix.settings.get().then((s) => setPricePer1k(Number((s as { llmPricePer1kTokens?: number }).llmPricePer1kTokens ?? 0)));
+  }, []);
+
+  const done = props.tasks.filter((t) => !t.parentId && (t.status === 'completed' || t.status === 'failed'));
+  const completed = done.filter((t) => t.status === 'completed');
+  const successRate = done.length > 0 ? Math.round((completed.length / done.length) * 100) : null;
+
+  // 平均耗时（完成的任务）
+  const durations = completed
+    .map((t) => (t.startedAt && t.completedAt ? new Date(t.completedAt).getTime() - new Date(t.startedAt).getTime() : null))
+    .filter((d): d is number => d !== null && d > 0);
+  const avgSec = durations.length > 0 ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length / 1000) : null;
+
+  // LLM token 用量 + 成本
+  const promptTokens = props.tasks.reduce((a, t) => a + (t.llmUsage?.promptTokens ?? 0), 0);
+  const completionTokens = props.tasks.reduce((a, t) => a + (t.llmUsage?.completionTokens ?? 0), 0);
+  const totalTokens = promptTokens + completionTokens;
+  const cost = pricePer1k > 0 ? (totalTokens / 1000) * pricePer1k : null;
+
+  const cell = (label: string, value: string, sub?: string) => (
+    <div className="flex-1 rounded-[10px] bg-[var(--fill-1)] px-4 py-3">
+      <p className="text-[11px] text-slate-500">{label}</p>
+      <p className="mt-1 text-lg font-semibold leading-6 text-slate-200">{value}</p>
+      {sub && <p className="mt-0.5 text-[11px] text-slate-500">{sub}</p>}
+    </div>
+  );
+
+  return (
+    <div className="mb-6 flex items-stretch gap-3">
+      {cell('任务总数', String(props.tasks.filter((t) => !t.parentId).length), `${props.tasks.filter((t) => t.status === 'running').length} 个运行中`)}
+      {cell('成功率', successRate === null ? '—' : `${successRate}%`, `${completed.length} 成功 / ${done.length - completed.length} 失败`)}
+      {cell('平均耗时', avgSec === null ? '—' : avgSec < 60 ? `${avgSec}s` : `${Math.floor(avgSec / 60)}m${avgSec % 60}s`, '仅统计已完成任务')}
+      {cell(
+        'LLM 用量',
+        totalTokens > 0 ? `${(totalTokens / 1000).toFixed(1)}k tokens` : '—',
+        cost === null ? '设置里填单价可估算成本' : `约 ¥${cost.toFixed(2)}（${pricePer1k} 元/千）`,
+      )}
     </div>
   );
 }
@@ -132,7 +179,7 @@ function TaskComposer(props: { profiles: Profile[]; groups: ProfileGroup[]; onCr
             {templates.slice(0, 6).map((t) => (
               <button
                 key={t.id}
-                className="h-[26px] rounded-lg bg-white/5 px-2 text-xs text-slate-400 transition-colors duration-150 hover:bg-white/10 hover:text-slate-200"
+                className="h-[26px] rounded-lg bg-[var(--fill-1)] px-2 text-xs text-slate-400 transition-colors duration-150 hover:bg-[var(--fill-2)] hover:text-slate-200"
                 title={t.instruction}
                 onClick={() => {
                   setName(t.instruction);
@@ -171,7 +218,7 @@ function TaskComposer(props: { profiles: Profile[]; groups: ProfileGroup[]; onCr
                     className={`inline-flex h-[26px] items-center gap-1 rounded-lg px-2 text-xs transition-colors duration-150 ${
                       allOn
                         ? 'bg-accent-soft text-info'
-                        : 'bg-white/5 text-slate-500 hover:bg-white/10 hover:text-slate-300'
+                        : 'bg-[var(--fill-1)] text-slate-500 hover:bg-[var(--fill-2)] hover:text-slate-300'
                     }`}
                     title={`${memberIds.length} 个 Profile`}
                     onClick={() => toggleGroup(g.id)}
@@ -192,7 +239,7 @@ function TaskComposer(props: { profiles: Profile[]; groups: ProfileGroup[]; onCr
                   className={`h-7 rounded-lg px-2.5 text-[13px] transition-colors duration-150 ${
                     on
                       ? 'bg-accent-soft text-info'
-                      : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-slate-200'
+                      : 'bg-[var(--fill-1)] text-slate-400 hover:bg-[var(--fill-2)] hover:text-slate-200'
                   }`}
                   onClick={() => toggle(p.id)}
                 >
@@ -219,7 +266,7 @@ function TaskComposer(props: { profiles: Profile[]; groups: ProfileGroup[]; onCr
           完成后存为流程（下次回放不调 LLM，页面改版自动接管修复）
         </div>
         {selectedIds.length > 1 && (
-          <div className="flex items-center gap-3 rounded-[10px] bg-white/[0.04] px-3 py-2.5">
+          <div className="flex items-center gap-3 rounded-[10px] bg-[var(--fill-1)] px-3 py-2.5">
             <span className="text-xs text-slate-500">已选 {selectedIds.length} 个</span>
             <Segmented
               options={[
@@ -281,7 +328,7 @@ function ActiveTasks(props: {
       key={t.id}
       onClick={() => props.onSelect(t.id)}
       className={`cursor-pointer rounded-[10px] p-3 transition-colors duration-150 ${
-        props.selectedId === t.id ? 'bg-accent-soft' : 'bg-white/[0.03] hover:bg-white/[0.06]'
+        props.selectedId === t.id ? 'bg-accent-soft' : 'bg-[var(--fill-0)] hover:bg-[var(--fill-1)]'
       }`}
       title="点击查看完整执行历史"
     >
@@ -441,7 +488,7 @@ function TaskLog(props: {
               {detail.steps?.length ?? 0} / {detail.maxSteps} 步
             </span>
           </div>
-          <div className="flex-1 space-y-1.5 overflow-auto rounded-[10px] bg-black/30 p-3 font-mono text-xs leading-5">
+          <div className="flex-1 space-y-1.5 overflow-auto rounded-[10px] bg-[var(--mask-strong)] p-3 font-mono text-xs leading-5">
             {(detail.steps ?? []).map((s) => (
               <div key={s.id} className="flex gap-2">
                 <span className="shrink-0 text-slate-600">#{s.seq}</span>

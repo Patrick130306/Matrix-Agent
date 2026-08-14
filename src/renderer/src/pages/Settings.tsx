@@ -1,7 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { matrix } from '../api';
-import { Button, Card, Field, PageHeader, Toggle, inputCls } from '../components/ui';
+import { Button, Card, Field, PageHeader, Segmented, Toggle, inputCls } from '../components/ui';
 import { Icon } from '../components/icons';
+import { ProxyPoolPanel } from '../components/ProxyPoolPanel';
 
 interface SettingsView {
   llmBaseUrl: string;
@@ -21,6 +22,9 @@ interface SettingsView {
   notifyDesktop: boolean;
   webhookUrl: string;
   webhookEvents: 'all' | 'failed';
+  theme: 'dark' | 'light';
+  behaviorSimulation: boolean;
+  llmPricePer1kTokens: number;
   hasApiKey: boolean;
 }
 
@@ -48,6 +52,8 @@ export function SettingsPage() {
       ...view,
       llmApiKey: apiKey || undefined, // 留空 = 不改动旧密钥
     });
+    // 即时应用主题（无需重启）
+    document.documentElement.classList.toggle('light', view.theme === 'light');
     setApiKey('');
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -201,6 +207,46 @@ export function SettingsPage() {
           </div>
         </Section>
 
+        <Section title="外观">
+          <div className="flex items-center justify-between gap-4 rounded-[10px] bg-[var(--fill-1)] px-3.5 py-3">
+            <div className="min-w-0">
+              <p className="text-[13px] text-slate-300">主题</p>
+              <p className="mt-0.5 text-xs text-slate-500">深色 / 亮色，保存后立即生效</p>
+            </div>
+            <Segmented
+              options={[
+                { value: 'dark', label: '深色' },
+                { value: 'light', label: '亮色' },
+              ]}
+              value={view.theme}
+              onChange={(v) => set('theme', v)}
+            />
+          </div>
+        </Section>
+
+        <Section title="反检测与成本">
+          <ToggleRow
+            label="拟人行为模拟"
+            hint="思考延迟、鼠标 hover 预热、输入节奏等（对抗行为指纹检测）；关闭后动作更机械但更快"
+            checked={view.behaviorSimulation}
+            onChange={(v) => set('behaviorSimulation', v)}
+          />
+          <Field label="LLM 单价（元 / 千 token，0 = 不估算成本）" hint="工作台统计条会按此单价估算每次任务的花费，如 2 元/千 token 填 2">
+            <input
+              type="number"
+              min={0}
+              step={0.01}
+              className={inputCls}
+              value={view.llmPricePer1kTokens}
+              onChange={(e) => set('llmPricePer1kTokens', Math.max(0, Number(e.target.value)))}
+            />
+          </Field>
+        </Section>
+
+        <Section title="代理池" desc="全局代理列表：批量导入 → 一键验证 → 在 Profile 编辑里选择「使用代理池」自动分配">
+          <ProxyPoolPanel />
+        </Section>
+
         <div className="flex items-center gap-3 pb-6">
           <Button variant="primary" size="lg" leftIcon="Check" onClick={() => void save()}>
             保存设置
@@ -233,7 +279,7 @@ function Section(props: { title: string; desc?: string; children: ReactNode }) {
 
 function ToggleRow(props: { label: string; hint?: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-[10px] bg-white/[0.04] px-3.5 py-3">
+    <div className="flex items-center justify-between gap-4 rounded-[10px] bg-[var(--fill-1)] px-3.5 py-3">
       <div className="min-w-0">
         <p className="text-[13px] text-slate-300">{props.label}</p>
         {props.hint && <p className="mt-0.5 text-xs text-slate-500">{props.hint}</p>}

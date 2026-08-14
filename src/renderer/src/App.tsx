@@ -36,6 +36,14 @@ export default function App() {
     void matrix.groups.list().then(setGroups);
   }, []);
 
+  // 主题：读设置并应用到 documentElement（亮色 = html.light，覆盖 :root 变量）
+  useEffect(() => {
+    void matrix.settings.get().then((s) => {
+      const light = (s as { theme?: string }).theme === 'light';
+      document.documentElement.classList.toggle('light', light);
+    });
+  }, []);
+
   useEffect(() => {
     refresh();
     // 任务事件驱动即时刷新；再挂一个慢轮询兜底（Profile 状态变化等）
@@ -68,8 +76,8 @@ export default function App() {
               <button
                 className={`flex h-9 w-full items-center gap-2.5 rounded-[10px] px-3 text-sm transition-colors duration-150 ease-out ${
                   page === item.key
-                    ? 'bg-white/10 font-medium text-slate-200'
-                    : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                    ? 'bg-[var(--fill-2)] font-medium text-slate-200'
+                    : 'text-slate-400 hover:bg-[var(--fill-1)] hover:text-slate-200'
                 }`}
                 onClick={() => setPage(item.key)}
               >

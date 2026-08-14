@@ -23,6 +23,7 @@ import type {
   TaskStep,
 } from '@shared/types';
 import {
+  CAPTCHA_SNOOZE_ROUNDS,
   HISTORY_SNAPSHOT_MAX_CHARS,
   PROMPT_CHAR_BUDGET,
   STUCK_THRESHOLD,
@@ -80,6 +81,10 @@ export class AgentCore {
   private screenshotEnabled = false;
   /** 本次运行录制的可复用动作序列（任务成功后由调度器存为流程） */
   private flowSteps: FlowStep[] = [];
+  /** §7.7 验证码弹窗豁免计数：用户确认"继续"后剩余跳过轮数（防同一验证码反复弹窗死循环） */
+  private captchaSnoozeRounds = 0;
+  /** §7.7 上次弹窗的验证码指纹（stateHash|reason）：同一页面状态不重复弹窗 */
+  private lastCaptchaKey = '';
 
   constructor(
     private readonly browsers: BrowserManager,
@@ -99,6 +104,8 @@ export class AgentCore {
 
     this.screenshotEnabled = settings.screenshotOnStep !== false;
     this.flowSteps = [];
+    this.captchaSnoozeRounds = 0;
+    this.lastCaptchaKey = '';
     let current = initialProfile; // 当前操作的 Profile（switch_profile 可切换）
 
     const result: TaskResult = { fragments: task.result?.fragments ?? [], final: undefined };
@@ -134,8 +141,19 @@ export class AgentCore {
       // ---- 验证码 / 人机协同检测（§7.7 三路并行） ----
       const captchaReason = await this.detectCaptcha(current.id, snapshot);
       if (captchaReason) {
-        const choice = await this.askHuman(task, current.id, captchaReason);
-        if (choice === 'terminate') throw new TaskCancelledError();
+        // 豁免期内不弹窗：用户刚确认"继续"，给 Agent 机会推进（页面可能已变化，验证码残留会自动消失）
+        if (this.captchaSnoozeRounds > 0) {
+          this.captchaSnoozeRounds--;
+        } else {
+          const key = `${stateHash}|${captchaReason}`;
+          // 同一页面状态 + 同一原因刚弹过窗 → 不再重复弹（防死循环；卡死检测护栏兜底）
+          if (key !== this.lastCaptchaKey) {
+            this.lastCaptchaKey = key;
+            const choice = await this.askHuman(task, current.id, captchaReason);
+            if (choice === 'terminate') throw new TaskCancelledError();
+            this.captchaSnoozeRounds = CAPTCHA_SNOOZE_ROUNDS;
+          }
+        }
         recentHashes.length = 0;
         continue;
       }
@@ -146,7 +164,15 @@ export class AgentCore {
       // ---- 3. LLM 决策（§7.5）；一次决策可返回动作批次，减少 LLM 往返 ----
       let actions: AgentAction[];
       try {
-        actions = await this.llm.decideAction(settings, apiKey, messages);
+        const decided = await this.llm.decideAction(settings, apiKey, messages);
+        actions = decided.actions;
+        // 累计 token 用量（仪表盘成本估算）
+        const cur = task.llmUsage ?? { promptTokens: 0, completionTokens: 0 };
+        task.llmUsage = {
+          promptTokens: cur.promptTokens + decided.usage.promptTokens,
+          completionTokens: cur.completionTokens + decided.usage.completionTokens,
+        };
+        upsertTask(task);
       } catch (err) {
         if (err instanceof LLMParseFailedError) {
           // 三级兜底全部失败 → 转 human_confirm，不直接判任务失败

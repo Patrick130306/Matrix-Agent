@@ -12,7 +12,20 @@ import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
 import { app } from 'electron';
-import type { Flow, LoginCheck, Profile, ProfileGroup, Schedule, Settings, Task, TaskStatus, TaskStep, TaskTemplate } from '@shared/types';
+import type {
+  ExtractTemplate,
+  Flow,
+  LoginCheck,
+  Profile,
+  ProfileGroup,
+  ProxyPoolEntry,
+  Schedule,
+  Settings,
+  Task,
+  TaskStatus,
+  TaskStep,
+  TaskTemplate,
+} from '@shared/types';
 import { DEFAULT_SETTINGS } from '@shared/constants';
 
 let db: Database.Database | null = null;
@@ -181,6 +194,39 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       ALTER TABLE tasks ADD COLUMN recording_file TEXT;
     `,
   },
+  {
+    // v7：代理池 + 提取模板 + LLM token 用量（仪表盘成本估算）
+    version: 7,
+    sql: `
+      ALTER TABLE tasks ADD COLUMN llm_usage TEXT;
+
+      CREATE TABLE proxy_pool (
+        id          TEXT PRIMARY KEY,
+        label       TEXT,
+        type        TEXT NOT NULL DEFAULT 'http',
+        host        TEXT NOT NULL,
+        port        INTEGER NOT NULL,
+        username    TEXT,
+        password_enc TEXT,
+        status      TEXT NOT NULL DEFAULT 'unknown',
+        ip          TEXT,
+        latency_ms  INTEGER,
+        last_error  TEXT,
+        checked_at  TEXT,
+        created_at  TEXT NOT NULL
+      );
+
+      CREATE TABLE extract_templates (
+        id          TEXT PRIMARY KEY,
+        name        TEXT NOT NULL,
+        category    TEXT NOT NULL DEFAULT '通用',
+        fields      TEXT NOT NULL,           -- string[] JSON
+        instruction TEXT NOT NULL DEFAULT '',
+        builtin     INTEGER NOT NULL DEFAULT 0,
+        created_at  TEXT NOT NULL
+      );
+    `,
+  },
 ];
 
 export function initDatabase(): Database.Database {
@@ -322,6 +368,7 @@ interface TaskRow {
   save_flow_as?: string | null;
   collect_fields?: string | null;
   recording_file?: string | null;
+  llm_usage?: string | null;
   result: string | null;
   retry_count: number;
   max_steps: number;
@@ -345,6 +392,7 @@ function rowToTask(r: TaskRow): Task {
     saveFlowAs: r.save_flow_as ?? undefined,
     collectFields: r.collect_fields ? (JSON.parse(r.collect_fields) as string[]) : undefined,
     recordingFile: r.recording_file ?? undefined,
+    llmUsage: r.llm_usage ? (JSON.parse(r.llm_usage) as Task['llmUsage']) : undefined,
     result: r.result ? (JSON.parse(r.result) as Task['result']) : undefined,
     retryCount: r.retry_count,
     maxSteps: r.max_steps,
@@ -371,10 +419,10 @@ export function upsertTask(t: Task): void {
   getDb()
     .prepare(
       `INSERT INTO tasks (id, name, type, requires_auth, status, profile_id, profile_ids, parent_id,
-                          flow_id, save_flow_as, collect_fields, recording_file,
+                          flow_id, save_flow_as, collect_fields, recording_file, llm_usage,
                           result, retry_count, max_steps, error_message, created_at, started_at, completed_at)
        VALUES (@id, @name, @type, @requires_auth, @status, @profile_id, @profile_ids, @parent_id,
-               @flow_id, @save_flow_as, @collect_fields, @recording_file,
+               @flow_id, @save_flow_as, @collect_fields, @recording_file, @llm_usage,
                @result, @retry_count, @max_steps, @error_message, @created_at, @started_at, @completed_at)
        ON CONFLICT(id) DO UPDATE SET
          status = excluded.status,
@@ -383,6 +431,7 @@ export function upsertTask(t: Task): void {
          retry_count = excluded.retry_count,
          error_message = excluded.error_message,
          recording_file = excluded.recording_file,
+         llm_usage = excluded.llm_usage,
          started_at = excluded.started_at,
          completed_at = excluded.completed_at`,
     )
@@ -399,6 +448,7 @@ export function upsertTask(t: Task): void {
       save_flow_as: t.saveFlowAs ?? null,
       collect_fields: t.collectFields ? JSON.stringify(t.collectFields) : null,
       recording_file: t.recordingFile ?? null,
+      llm_usage: t.llmUsage ? JSON.stringify(t.llmUsage) : null,
       result: t.result ? JSON.stringify(t.result) : null,
       retry_count: t.retryCount,
       max_steps: t.maxSteps,
@@ -848,4 +898,150 @@ export function upsertFlow(f: Flow): void {
 
 export function deleteFlow(id: string): void {
   getDb().prepare(`DELETE FROM flows WHERE id = ?`).run(id);
+}
+
+// ------------------------------------------------------------------ ProxyPool（全局代理池）
+
+interface ProxyPoolRow {
+  id: string;
+  label: string | null;
+  type: string;
+  host: string;
+  port: number;
+  username: string | null;
+  password_enc: string | null;
+  status: string;
+  ip: string | null;
+  latency_ms: number | null;
+  last_error: string | null;
+  checked_at: string | null;
+  created_at: string;
+}
+
+function rowToProxyEntry(r: ProxyPoolRow): ProxyPoolEntry {
+  return {
+    id: r.id,
+    label: r.label ?? undefined,
+    type: r.type as ProxyPoolEntry['type'],
+    host: r.host,
+    port: r.port,
+    username: r.username ?? undefined,
+    passwordEnc: r.password_enc ?? undefined,
+    status: r.status as ProxyPoolEntry['status'],
+    ip: r.ip ?? undefined,
+    latencyMs: r.latency_ms ?? undefined,
+    lastError: r.last_error ?? undefined,
+    checkedAt: r.checked_at ?? undefined,
+    createdAt: r.created_at,
+  };
+}
+
+export function listProxyPool(): ProxyPoolEntry[] {
+  const rows = getDb().prepare(`SELECT * FROM proxy_pool ORDER BY created_at ASC`).all() as ProxyPoolRow[];
+  return rows.map(rowToProxyEntry);
+}
+
+export function getProxyEntry(id: string): ProxyPoolEntry | null {
+  const row = getDb().prepare(`SELECT * FROM proxy_pool WHERE id = ?`).get(id) as ProxyPoolRow | undefined;
+  return row ? rowToProxyEntry(row) : null;
+}
+
+export function upsertProxyEntry(e: ProxyPoolEntry): void {
+  getDb()
+    .prepare(
+      `INSERT INTO proxy_pool (id, label, type, host, port, username, password_enc, status, ip, latency_ms, last_error, checked_at, created_at)
+       VALUES (@id, @label, @type, @host, @port, @username, @password_enc, @status, @ip, @latency_ms, @last_error, @checked_at, @created_at)
+       ON CONFLICT(id) DO UPDATE SET
+         label = excluded.label,
+         type = excluded.type,
+         host = excluded.host,
+         port = excluded.port,
+         username = excluded.username,
+         password_enc = excluded.password_enc,
+         status = excluded.status,
+         ip = excluded.ip,
+         latency_ms = excluded.latency_ms,
+         last_error = excluded.last_error,
+         checked_at = excluded.checked_at`,
+    )
+    .run({
+      id: e.id,
+      label: e.label ?? null,
+      type: e.type,
+      host: e.host,
+      port: e.port,
+      username: e.username ?? null,
+      password_enc: e.passwordEnc ?? null,
+      status: e.status,
+      ip: e.ip ?? null,
+      latency_ms: e.latencyMs ?? null,
+      last_error: e.lastError ?? null,
+      checked_at: e.checkedAt ?? null,
+      created_at: e.createdAt,
+    });
+}
+
+export function deleteProxyEntry(id: string): void {
+  getDb().prepare(`DELETE FROM proxy_pool WHERE id = ?`).run(id);
+}
+
+export function clearProxyPool(): number {
+  return getDb().prepare(`DELETE FROM proxy_pool`).run().changes;
+}
+
+// ------------------------------------------------------------------ ExtractTemplates（结构化采集模板）
+
+interface ExtractTemplateRow {
+  id: string;
+  name: string;
+  category: string;
+  fields: string;
+  instruction: string;
+  builtin: number;
+  created_at: string;
+}
+
+function rowToExtractTemplate(r: ExtractTemplateRow): ExtractTemplate {
+  return {
+    id: r.id,
+    name: r.name,
+    category: r.category,
+    fields: JSON.parse(r.fields) as string[],
+    instruction: r.instruction,
+    builtin: r.builtin === 1,
+    createdAt: r.created_at,
+  };
+}
+
+export function listExtractTemplates(): ExtractTemplate[] {
+  const rows = getDb()
+    .prepare(`SELECT * FROM extract_templates ORDER BY builtin DESC, created_at ASC`)
+    .all() as ExtractTemplateRow[];
+  return rows.map(rowToExtractTemplate);
+}
+
+export function upsertExtractTemplate(t: ExtractTemplate): void {
+  getDb()
+    .prepare(
+      `INSERT INTO extract_templates (id, name, category, fields, instruction, builtin, created_at)
+       VALUES (@id, @name, @category, @fields, @instruction, @builtin, @created_at)
+       ON CONFLICT(id) DO UPDATE SET
+         name = excluded.name,
+         category = excluded.category,
+         fields = excluded.fields,
+         instruction = excluded.instruction`,
+    )
+    .run({
+      id: t.id,
+      name: t.name,
+      category: t.category,
+      fields: JSON.stringify(t.fields),
+      instruction: t.instruction,
+      builtin: t.builtin ? 1 : 0,
+      created_at: t.createdAt,
+    });
+}
+
+export function deleteExtractTemplate(id: string): void {
+  getDb().prepare(`DELETE FROM extract_templates WHERE id = ?`).run(id);
 }

@@ -146,7 +146,7 @@ function FeedbackDialog(props: { dialog: DialogState; close: (v: boolean | strin
 
   return (
     <div
-      className="fixed inset-0 z-[950] flex items-center justify-center bg-black/60 p-6 animate-fade-in"
+      className="fixed inset-0 z-[950] flex items-center justify-center bg-[var(--mask)] p-6 animate-fade-in"
       onClick={() => close(false)}
     >
       <div

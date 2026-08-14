@@ -18,29 +18,37 @@ import type {
   TaskEvent,
   TaskTemplate,
 } from '@shared/types';
-import { EVT, IPC } from '@shared/constants';
+import { EVT, IPC, EXTRACT_PRESET_TEMPLATES } from '@shared/constants';
 import {
   createGroup,
+  deleteExtractTemplate,
   deleteFlow,
   deleteGroup,
   deleteLoginCheck,
+  deleteProxyEntry,
   deleteSchedule,
   deleteTemplate,
+  clearProxyPool,
   getDataRoot,
   getLoginCheck,
   getSettings,
   getTask,
+  listExtractTemplates,
   listFlows,
   listGroups,
   listLoginChecks,
   listProfiles,
+  listProxyPool,
   listSchedules,
   listTasks,
   listTaskSteps,
   listTemplates,
   renameGroup,
   saveSettings,
+  upsertExtractTemplate,
+  upsertFlow,
   upsertLoginCheck,
+  upsertProxyEntry,
   upsertSchedule,
   upsertTemplate,
 } from './db';
@@ -48,6 +56,7 @@ import { computeNextRun } from './schedule-runner';
 import { decryptString, encryptString } from './secure-store';
 import { detectSystemChrome } from './chrome-locator';
 import { checkProfileProxy, checkProxyConfig, type ProxyConfig } from './proxy-checker';
+import { addProxyEntries, checkAllProxies, parseProxyList } from './proxy-pool';
 import { suggestFingerprint } from './geo';
 import { runLoginCheck } from './login-checker';
 import { testWebhook } from './notifier';
@@ -317,6 +326,18 @@ export function registerIpcHandlers(deps: IpcDeps, bridge: HumanConfirmBridge): 
     deleteFlow(id);
     return { ok: true };
   });
+  // 可视化编辑流程：整存 steps（删步/调序/改参数在渲染端完成后整存）
+  ipcMain.handle(IPC.flowsUpdate, (_e, id: string, patch: { name?: string; steps?: unknown[] }) => {
+    const f = listFlows().find((x) => x.id === id);
+    if (!f) throw new Error('流程不存在');
+    if (patch.name !== undefined) f.name = patch.name.trim() || f.name;
+    if (patch.steps !== undefined) {
+      if (!Array.isArray(patch.steps) || patch.steps.length === 0) throw new Error('流程至少保留一步');
+      f.steps = patch.steps as typeof f.steps;
+    }
+    upsertFlow(f);
+    return f;
+  });
 
   // ---------------------------------------------------------------- tasks
   ipcMain.handle(
@@ -399,6 +420,65 @@ export function registerIpcHandlers(deps: IpcDeps, bridge: HumanConfirmBridge): 
   });
   ipcMain.handle(IPC.templatesDelete, (_e, id: string) => {
     deleteTemplate(id);
+    return { ok: true };
+  });
+
+  // ---------------------------------------------------------------- proxy pool（全局代理池）
+  ipcMain.handle(IPC.proxyPoolList, () => listProxyPool());
+  // 批量导入：文本（每行一条 host:port[:user:pass] 或 protocol://host:port:user:pass）
+  ipcMain.handle(IPC.proxyPoolAdd, (_e, text: string) => {
+    if (!text?.trim()) throw new Error('导入内容为空');
+    const { entries, skipped } = parseProxyList(text);
+    const added = addProxyEntries(entries);
+    return { added, skipped: skipped.length, skippedSamples: skipped.slice(0, 5) };
+  });
+  ipcMain.handle(IPC.proxyPoolDelete, (_e, id: string) => {
+    deleteProxyEntry(id);
+    return { ok: true };
+  });
+  ipcMain.handle(IPC.proxyPoolClear, () => {
+    const n = clearProxyPool();
+    return { ok: true, cleared: n };
+  });
+  // 一键验证全部（并发 PROXY_CHECK_CONCURRENCY，结果写回）
+  ipcMain.handle(IPC.proxyPoolCheckAll, async () => {
+    const summary = await checkAllProxies(getSettings());
+    return { ...summary, list: listProxyPool() };
+  });
+
+  // ---------------------------------------------------------------- extract templates（采集模板）
+  ipcMain.handle(IPC.extractTemplatesList, () => {
+    // 内置模板 + 用户自定义合并返回
+    const builtin = EXTRACT_PRESET_TEMPLATES.map((t, i) => ({
+      id: `__builtin_${i}`,
+      name: t.name,
+      category: t.category,
+      fields: t.fields,
+      instruction: t.instruction,
+      builtin: true,
+      createdAt: '',
+    }));
+    return [...builtin, ...listExtractTemplates()];
+  });
+  ipcMain.handle(
+    IPC.extractTemplatesCreate,
+    (_e, input: { name: string; category: string; fields: string[]; instruction: string }) => {
+      if (!input.name?.trim() || !input.fields?.length) throw new Error('模板名称和采集字段不能为空');
+      const t = {
+        id: crypto.randomUUID(),
+        name: input.name.trim(),
+        category: input.category?.trim() || '通用',
+        fields: input.fields.map((s) => s.trim()).filter(Boolean),
+        instruction: input.instruction ?? '',
+        builtin: false,
+        createdAt: new Date().toISOString(),
+      };
+      upsertExtractTemplate(t);
+      return t;
+    },
+  );
+  ipcMain.handle(IPC.extractTemplatesDelete, (_e, id: string) => {
+    deleteExtractTemplate(id);
     return { ok: true };
   });
 

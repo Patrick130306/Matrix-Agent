@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Profile, ProfileGroup, ProfileInput } from '@shared/types';
 import { OS_PRESET_LIST } from '@shared/presets';
 import { DEFAULT_PROFILE_TUNABLES } from '@shared/constants';
@@ -174,7 +174,7 @@ export function ProfilesPage(props: { profiles: Profile[]; groups: ProfileGroup[
           </thead>
           <tbody>
             {filtered.map((p) => (
-              <tr key={p.id} className="border-b border-white/5 transition-colors last:border-0 hover:bg-white/[0.03]">
+              <tr key={p.id} className="border-b border-[var(--line-1)] transition-colors last:border-0 hover:bg-[var(--fill-0)]">
                 <td className="px-4 py-3 text-sm font-medium text-slate-200">{p.name}</td>
                 <td className="px-4 py-3">
                   {groupName(p.groupId) ? (
@@ -202,7 +202,7 @@ export function ProfilesPage(props: { profiles: Profile[]; groups: ProfileGroup[
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1.5 text-xs text-slate-500">
-                      <span className="h-1.5 w-1.5 rounded-full bg-white/20" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-[var(--fill-3)]" />
                       空闲
                     </span>
                   )}
@@ -261,7 +261,7 @@ export function ProfilesPage(props: { profiles: Profile[]; groups: ProfileGroup[
           <input
             type="file"
             accept="application/json"
-            className="text-sm text-slate-400 file:mr-3 file:h-8 file:rounded-[10px] file:border-0 file:bg-white/5 file:px-3 file:text-sm file:font-medium file:text-slate-200 hover:file:bg-white/10"
+            className="text-sm text-slate-400 file:mr-3 file:h-8 file:rounded-[10px] file:border-0 file:bg-[var(--fill-1)] file:px-3 file:text-sm file:font-medium file:text-[var(--slate-200)] hover:file:bg-[var(--fill-2)]"
             onChange={(e) => {
               const f = e.target.files?.[0];
               if (f) void doImport(f);
@@ -319,7 +319,7 @@ function ProxyCell(props: { profile: Profile; onChecked: () => void }) {
           {p.proxyType === 'none' ? '直连' : `${p.proxyType}://${p.proxyHost}:${p.proxyPort}`}
         </span>
         <button
-          className="h-[22px] rounded-md bg-white/5 px-1.5 text-[11px] text-slate-400 transition-colors hover:bg-white/10 hover:text-slate-200 disabled:opacity-50"
+          className="h-[22px] rounded-md bg-[var(--fill-1)] px-1.5 text-[11px] text-slate-400 transition-colors hover:bg-[var(--fill-2)] hover:text-slate-200 disabled:opacity-50"
           disabled={checking}
           onClick={() => void check()}
           title="检测代理可用性 + 出口 IP"
@@ -390,7 +390,7 @@ function GroupManageModal(props: { groups: ProfileGroup[]; onClose: () => void; 
     <Modal title="分组管理" onClose={props.onClose}>
       <div className="space-y-2">
         {props.groups.map((g) => (
-          <div key={g.id} className="flex items-center gap-2 rounded-[10px] bg-white/[0.04] px-3 py-2.5">
+          <div key={g.id} className="flex items-center gap-2 rounded-[10px] bg-[var(--fill-1)] px-3 py-2.5">
             <Icon name="Folder" size={16} className="text-slate-500" />
             <span className="flex-1 text-sm text-slate-200">{g.name}</span>
             <Button size="sm" onClick={() => void rename(g)}>
@@ -402,11 +402,11 @@ function GroupManageModal(props: { groups: ProfileGroup[]; onClose: () => void; 
           </div>
         ))}
         {props.groups.length === 0 && (
-          <p className="rounded-[10px] border border-dashed border-white/10 px-3 py-6 text-center text-xs text-slate-500">
+          <p className="rounded-[10px] border border-dashed border-[var(--line-2)] px-3 py-6 text-center text-xs text-slate-500">
             还没有分组。按店铺 / 平台建组，例如「抖音小店」「TikTok 美区」。
           </p>
         )}
-        <div className="flex gap-2 border-t border-white/5 pt-4">
+        <div className="flex gap-2 border-t border-[var(--line-1)] pt-4">
           <input
             className={inputCls}
             value={newName}
@@ -504,10 +504,19 @@ function ProfileForm(props: { profile: Profile | null; groups: ProfileGroup[]; o
     proxyPort: p?.proxyPort ?? 0,
     proxyUsername: p?.proxyUsername ?? '',
     proxyPassword: '', // 编辑时留空表示不改动
+    proxyPoolId: p?.proxyPoolId ?? '',
   });
   const [saving, setSaving] = useState(false);
   const [fpBusy, setFpBusy] = useState(false);
   const [fpHint, setFpHint] = useState('');
+  const [poolEntries, setPoolEntries] = useState<{ id: string; label: string }[]>([]);
+
+  // 加载代理池（供「使用代理池」选择）
+  useEffect(() => {
+    void matrix.proxyPool.list().then((list) =>
+      setPoolEntries(list.map((e) => ({ id: e.id, label: `${e.type}://${e.host}:${e.port}${e.status === 'ok' ? ' ✓' : e.status === 'fail' ? ' ✗' : ''}` }))),
+    );
+  }, []);
 
   const set = (k: keyof typeof form, v: string | number) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -563,6 +572,7 @@ function ProfileForm(props: { profile: Profile | null; groups: ProfileGroup[]; o
         proxyPort: form.proxyPort ? Number(form.proxyPort) : undefined,
         proxyUsername: form.proxyUsername || undefined,
         proxyPasswordEnc: p?.proxyPasswordEnc,
+        proxyPoolId: form.proxyPoolId || undefined,
       };
 
       if (p) {
@@ -654,36 +664,70 @@ function ProfileForm(props: { profile: Profile | null; groups: ProfileGroup[]; o
           </select>
         </Field>
 
-        <div className="col-span-2 mt-2 border-t border-white/5 pt-4">
+        <div className="col-span-2 mt-2 border-t border-[var(--line-1)] pt-4">
           <div className="mb-3 flex items-center justify-between gap-2">
             <p className="text-[13px] font-medium text-slate-300">代理设置（代理几乎都需要认证，已原生支持，§ADR-1）</p>
-            <Button size="sm" leftIcon="Scan" disabled={fpBusy} onClick={() => void autoFingerprint()}>
+            <Button size="sm" leftIcon="Scan" disabled={fpBusy || Boolean(form.proxyPoolId)} onClick={() => void autoFingerprint()}>
               {fpBusy ? '生成中…' : '根据出口 IP 生成指纹'}
             </Button>
           </div>
           {fpHint && <p className="mb-2 text-[12px] leading-5 text-ok">{fpHint}</p>}
-          <div className="grid grid-cols-4 gap-3">
-            <Field label="类型">
-              <select className={inputCls} value={form.proxyType} onChange={(e) => set('proxyType', e.target.value)}>
-                <option value="none">直连</option>
-                <option value="http">HTTP</option>
-                <option value="https">HTTPS</option>
-                <option value="socks5">SOCKS5</option>
+          <Field
+            label="代理来源"
+            hint="选「代理池」后启动时自动从池中取可用代理（忽略下方手动配置）；池在 设置 → 代理池 管理"
+          >
+            <select
+              className={inputCls}
+              value={form.proxyPoolId ? 'pool' : 'manual'}
+              onChange={(e) => {
+                // 切换来源：池 ↔ 手动
+                if (e.target.value === 'pool') {
+                  if (poolEntries.length > 0) set('proxyPoolId', poolEntries[0].id);
+                } else {
+                  set('proxyPoolId', '');
+                }
+              }}
+            >
+              <option value="manual">手动配置（下方）</option>
+              <option value="pool" disabled={poolEntries.length === 0}>
+                代理池{poolEntries.length === 0 ? '（池为空，先去设置页导入）' : `（${poolEntries.length} 条可用）`}
+              </option>
+            </select>
+          </Field>
+          {form.proxyPoolId ? (
+            <Field label="使用的代理条目">
+              <select className={inputCls} value={form.proxyPoolId} onChange={(e) => set('proxyPoolId', e.target.value)}>
+                {poolEntries.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.label}
+                  </option>
+                ))}
               </select>
             </Field>
-            <Field label="主机">
-              <input className={inputCls} value={form.proxyHost} onChange={(e) => set('proxyHost', e.target.value)} placeholder="1.2.3.4" />
-            </Field>
-            <Field label="端口">
-              <input type="number" className={inputCls} value={form.proxyPort || ''} onChange={(e) => set('proxyPort', e.target.value)} />
-            </Field>
-            <Field label="用户名">
-              <input className={inputCls} value={form.proxyUsername} onChange={(e) => set('proxyUsername', e.target.value)} />
-            </Field>
-            <Field label={p ? '密码（留空 = 不改动）' : '密码'}>
-              <input type="password" className={inputCls} value={form.proxyPassword} onChange={(e) => set('proxyPassword', e.target.value)} />
-            </Field>
-          </div>
+          ) : (
+            <div className="grid grid-cols-4 gap-3">
+              <Field label="类型">
+                <select className={inputCls} value={form.proxyType} onChange={(e) => set('proxyType', e.target.value)}>
+                  <option value="none">直连</option>
+                  <option value="http">HTTP</option>
+                  <option value="https">HTTPS</option>
+                  <option value="socks5">SOCKS5</option>
+                </select>
+              </Field>
+              <Field label="主机">
+                <input className={inputCls} value={form.proxyHost} onChange={(e) => set('proxyHost', e.target.value)} placeholder="1.2.3.4" />
+              </Field>
+              <Field label="端口">
+                <input type="number" className={inputCls} value={form.proxyPort || ''} onChange={(e) => set('proxyPort', e.target.value)} />
+              </Field>
+              <Field label="用户名">
+                <input className={inputCls} value={form.proxyUsername} onChange={(e) => set('proxyUsername', e.target.value)} />
+              </Field>
+              <Field label={p ? '密码（留空 = 不改动）' : '密码'}>
+                <input type="password" className={inputCls} value={form.proxyPassword} onChange={(e) => set('proxyPassword', e.target.value)} />
+              </Field>
+            </div>
+          )}
         </div>
       </div>
     </Modal>

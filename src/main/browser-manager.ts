@@ -10,11 +10,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { chromium, type BrowserContext, type Cookie, type Page } from 'playwright-core';
 import type { AgentAction, PageSnapshot, Profile, Settings } from '@shared/types';
+import { DEFAULT_SETTINGS } from '@shared/constants';
 import { buildFingerprintInitScript, getPreset } from './fingerprint';
+import { resolveProxyConfig } from './proxy-pool';
 import { locateByIdx, serializePage } from './serializer';
 import { resolveChromeExecutable } from './chrome-locator';
 import { cleanSingletonLocks } from './recovery';
-import { decryptString } from './secure-store';
 import { getDataRoot, getLogsDir, registerRunningInstance, unregisterRunningInstance, setProfileStatus } from './db';
 
 interface InstanceEntry {
@@ -26,6 +27,8 @@ interface InstanceEntry {
 
 export class BrowserManager {
   private readonly instances = new Map<string, InstanceEntry>();
+  /** 最近一次启动用的设置（execute 里的行为拟真开关依赖它） */
+  private activeSettings: Settings = DEFAULT_SETTINGS;
 
   /** 当前 Profile 是否已有活跃实例 */
   isRunning(profileId: string): boolean {
@@ -43,6 +46,7 @@ export class BrowserManager {
   async launch(profile: Profile, settings: Settings, manual = false): Promise<BrowserContext> {
     const existing = this.instances.get(profile.id);
     if (existing) return existing.context;
+    this.activeSettings = settings;
 
     // 1. 清理残留锁文件（§8.3）
     fs.mkdirSync(profile.userDataDir, { recursive: true });
@@ -178,12 +182,21 @@ export class BrowserManager {
 
       case 'click': {
         const el = await locateByIdx(page, elements, action.idx);
-        // 拟人点击：滚动到可见 → 贝塞尔轨迹移动鼠标 → 按下/抬起（避免瞬移点击）
+        // 拟人点击：思考延迟 → 滚动到可见 → hover 预热 → 贝塞尔轨迹移动 → 按下/抬起
+        const sim = this.activeSettings.behaviorSimulation !== false;
+        if (sim) await page.waitForTimeout(randInt(120, 380)); // 认知决策延迟（真实用户不会立即点）
         await el.scrollIntoViewIfNeeded({ timeout: 5000 }).catch(() => undefined);
         const box = await el.boundingBox();
         if (box) {
           const tx = box.x + box.width * (0.3 + Math.random() * 0.4);
           const ty = box.y + box.height * (0.3 + Math.random() * 0.4);
+          if (sim) {
+            // hover 预热：先移到目标附近 65% 处停一下（真实用户常先接近再微调），再走完整贝塞尔
+            const warmX = box.x + box.width * 0.5 + (Math.random() - 0.5) * box.width * 0.5;
+            const warmY = box.y + box.height * 0.5 + (Math.random() - 0.5) * box.height * 0.5;
+            await humanMouseMove(page, { x: warmX, y: warmY });
+            await page.waitForTimeout(randInt(60, 180));
+          }
           await humanMouseMove(page, { x: tx, y: ty });
           await page.waitForTimeout(randInt(30, 90));
           await page.mouse.down();
@@ -197,6 +210,8 @@ export class BrowserManager {
 
       case 'type': {
         const el = await locateByIdx(page, elements, action.idx);
+        const sim = this.activeSettings.behaviorSimulation !== false;
+        if (sim) await page.waitForTimeout(randInt(180, 420)); // 聚焦前"找输入框"的认知延迟
         await el.click({ timeout: 5000 });
         await el.fill('');
         // 拟人输入：逐字符随机节奏 + 偶尔停顿（模拟真实打字）
@@ -343,18 +358,11 @@ async function detectBrowserPid(context: BrowserContext): Promise<number | null>
   }
 }
 
-/** ADR-1：Playwright proxy 选项原生支持代理认证，删除 --proxy-server。 */
+/** ADR-1：Playwright proxy 选项原生支持代理认证；优先代理池分配（§11.5），其次 Profile 自身配置。 */
 function buildProxyConfig(profile: Profile):
   | { server: string; username?: string; password?: string }
   | undefined {
-  if (profile.proxyType === 'none' || !profile.proxyHost || !profile.proxyPort) return undefined;
-  const server = `${profile.proxyType}://${profile.proxyHost}:${profile.proxyPort}`;
-  const password = profile.proxyPasswordEnc ? decryptString(profile.proxyPasswordEnc) : '';
-  return {
-    server,
-    username: profile.proxyUsername || undefined,
-    password: password || undefined,
-  };
+  return resolveProxyConfig(profile);
 }
 
 /** Accept-Language 头：真实浏览器按 q 值降序排列（en-US,en;q=0.9），不能逗号直拼。 */

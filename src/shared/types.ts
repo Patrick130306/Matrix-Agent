@@ -59,6 +59,8 @@ export interface Profile {
   proxyUsername?: string;
   proxyPasswordEnc?: string; // safeStorage 加密后的 base64（ADR-6）
   proxyCheck?: ProxyCheckResult; // 最近一次出口检测结果
+  /** 代理池分配：设置后忽略自身 proxyType/host/port，启动时从池中取可用代理 */
+  proxyPoolId?: string;
 
   // 路径
   userDataDir: string;
@@ -136,6 +138,9 @@ export interface Task {
   /** 任务执行录像（相对 logs 目录，如 {taskId}/recording.webm）；recordTasks 开启且成功录制时存在 */
   recordingFile?: string;
 
+  /** LLM token 用量累计（仪表盘成本估算用） */
+  llmUsage?: { promptTokens: number; completionTokens: number };
+
   errorMessage?: string;
 
   createdAt: string;
@@ -172,7 +177,14 @@ export interface Settings {
   notifyDesktop: boolean; // 任务终态桌面通知，默认开
   webhookUrl: string; // 任务终态回调（钉钉/企微/自建），空 = 关闭
   webhookEvents: 'all' | 'failed'; // Webhook 触发范围
+
+  // 外观 / 反检测 / 成本
+  theme: ThemeMode; // 深色 / 亮色（默认深色）
+  behaviorSimulation: boolean; // 拟人行为模拟（思考延迟 / hover 预热等），默认开
+  llmPricePer1kTokens: number; // LLM 单价（元/千 token），仪表盘成本估算用；0 = 不估算
 }
+
+export type ThemeMode = 'dark' | 'light';
 
 /** 渲染进程提交上来的设置表单（密钥字段为明文，主进程负责加密） */
 export type SettingsInput = Omit<Settings, 'llmApiKeyEnc'> & { llmApiKey?: string };
@@ -336,5 +348,44 @@ export interface Flow {
   runCount: number;
   lastRunAt?: string;
   lastStatus?: 'completed' | 'failed';
+  createdAt: string;
+}
+
+// ---------------------------------------------------------------- 代理池
+
+export type ProxyPoolStatus = 'unknown' | 'ok' | 'fail';
+
+/** 全局代理池条目（批量导入 / 一键验证 / 分配给 Profile 使用） */
+export interface ProxyPoolEntry {
+  id: string;
+  label?: string; // 备注名（可选）
+  type: ProxyType; // http / https / socks5
+  host: string;
+  port: number;
+  username?: string;
+  passwordEnc?: string; // safeStorage 加密
+  status: ProxyPoolStatus;
+  ip?: string; // 出口 IP（验证成功后）
+  latencyMs?: number;
+  lastError?: string;
+  checkedAt?: string;
+  createdAt: string;
+}
+
+export type ProxyPoolEntryInput = Pick<
+  ProxyPoolEntry,
+  'label' | 'type' | 'host' | 'port' | 'username' | 'passwordEnc'
+>;
+
+// ---------------------------------------------------------------- 提取模板
+
+/** 结构化采集模板：预置 + 用户自定义，一键填充采集表单 */
+export interface ExtractTemplate {
+  id: string;
+  name: string;
+  category: string; // 如「电商」「社媒」「通用」
+  fields: string[]; // 采集字段（标题、价格…）
+  instruction: string; // 附加指令（翻页策略等）
+  builtin: boolean; // 内置模板不可删除
   createdAt: string;
 }

@@ -92,7 +92,7 @@ export function LoginStatePanel(props: { profile: Profile; onClose: () => void }
           </p>
           <div className="space-y-2">
             {checks.map((c) => (
-              <div key={c.id} className="flex items-center gap-3 rounded-[10px] bg-white/[0.04] px-3 py-2.5">
+              <div key={c.id} className="flex items-center gap-3 rounded-[10px] bg-[var(--fill-1)] px-3 py-2.5">
                 <span
                   className={`inline-flex shrink-0 items-center gap-1.5 text-xs ${
                     c.status === 'online' ? 'text-ok' : c.status === 'offline' ? 'text-danger' : 'text-slate-500'
@@ -101,7 +101,7 @@ export function LoginStatePanel(props: { profile: Profile; onClose: () => void }
                 >
                   <span
                     className={`h-1.5 w-1.5 rounded-full ${
-                      c.status === 'online' ? 'bg-ok' : c.status === 'offline' ? 'bg-danger' : 'bg-white/20'
+                      c.status === 'online' ? 'bg-ok' : c.status === 'offline' ? 'bg-danger' : 'bg-[var(--fill-3)]'
                     }`}
                   />
                   {c.status === 'online' ? '在线' : c.status === 'offline' ? '掉线' : '未检测'}
@@ -120,14 +120,14 @@ export function LoginStatePanel(props: { profile: Profile; onClose: () => void }
               </div>
             ))}
             {checks.length === 0 && (
-              <p className="rounded-[10px] border border-dashed border-white/10 px-3 py-6 text-center text-xs text-slate-500">
+              <p className="rounded-[10px] border border-dashed border-[var(--line-2)] px-3 py-6 text-center text-xs text-slate-500">
                 还没有检测项。示例：抖音小店 → URL 填抖店后台首页，关键词填「退出登录」
               </p>
             )}
           </div>
 
           {/* 新建检测项 */}
-          <div className="mt-3 grid grid-cols-2 gap-3 rounded-[10px] bg-white/[0.04] p-4">
+          <div className="mt-3 grid grid-cols-2 gap-3 rounded-[10px] bg-[var(--fill-1)] p-4">
             <Field label="平台名称">
               <input className={inputCls} value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="抖音小店" />
             </Field>
@@ -150,7 +150,7 @@ export function LoginStatePanel(props: { profile: Profile; onClose: () => void }
         </div>
 
         {/* Cookie 迁移 */}
-        <div className="border-t border-white/5 pt-4">
+        <div className="border-t border-[var(--line-1)] pt-4">
           <p className="mb-2.5 text-[13px] font-medium text-slate-300">Cookie 迁移（登录态备份 / 买号导入）</p>
           <div className="flex items-center gap-2">
             <Button variant="outline" leftIcon="Download" onClick={() => void exportCookies()}>导出 Cookie</Button>

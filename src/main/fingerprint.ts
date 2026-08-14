@@ -237,6 +237,35 @@ export function buildFingerprintInitScript(profile: Profile): string {
   hookGetParameter(window.WebGLRenderingContext && window.WebGLRenderingContext.prototype);
   hookGetParameter(window.WebGL2RenderingContext && window.WebGL2RenderingContext.prototype);
 
+  // ---- WebGL readPixels 种子噪声（§6.5 升级）：强检测常读 WebGL 像素做指纹，
+  // 与 Canvas getImageData 同机制：LSB 级扰动、同 Profile 结果稳定 ----
+  function hookReadPixels(proto) {
+    if (!proto || !proto.readPixels) return;
+    const orig = proto.readPixels;
+    proto.readPixels = nativeWrap(function readPixels(x, y, width, height, format, type, pixels) {
+      orig.apply(this, arguments);
+      try {
+        const isU8 = type === 0x1401 || pixels instanceof Uint8Array; // UNSIGNED_BYTE
+        if (!isU8 || !pixels || !pixels.length) return pixels;
+        let h = (CFG.seed ^ 0x9E3) | 0;
+        const step = Math.max(1, Math.floor(pixels.length / 32));
+        for (let i = 0; i < pixels.length; i += step) {
+          h = (h * 31 + pixels[i]) | 0;
+        }
+        const rand = mulberry32((h >>> 0) ^ CFG.seed);
+        for (let i = 0; i < pixels.length; i += 4) {
+          if (rand() < 0.03) {
+            pixels[i] = pixels[i] ^ 1;
+            if (i + 2 < pixels.length) pixels[i + 2] = pixels[i + 2] ^ 1; // B 通道
+          }
+        }
+      } catch (e) { /* 只读 buffer 等环境跳过 */ }
+      return pixels;
+    }, 'readPixels');
+  }
+  hookReadPixels(window.WebGLRenderingContext && window.WebGLRenderingContext.prototype);
+  hookReadPixels(window.WebGL2RenderingContext && window.WebGL2RenderingContext.prototype);
+
   // ---- Audio 种子微噪声（±0.0001 量级，§6.3） ----
   if (window.AudioBuffer && window.AudioBuffer.prototype) {
     const origGetChannelData = window.AudioBuffer.prototype.getChannelData;
