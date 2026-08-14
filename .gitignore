@@ -7,3 +7,4 @@ logs/
 release-log.txt
 .DS_Store
 PACKAGING.md
+.gh_token.tmp
