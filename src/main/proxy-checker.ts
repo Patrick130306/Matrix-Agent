@@ -58,9 +58,12 @@ export async function checkProfileProxy(profile: Profile, settings: Settings): P
   }
 }
 
-/** 独立入口：给定代理配置（可以是未保存的表单值），返回出口 IP。 */
+/** 独立入口：给定代理配置（可以是未保存的表单值），返回出口 IP。直连（none/缺省）返回本机出口 IP。 */
 export async function checkProxyConfig(proxy: ProxyConfig, settings: Settings): Promise<string> {
-  if (proxy.type === 'none' || !proxy.host || !proxy.port) throw new Error('代理配置不完整');
+  if (proxy.type === 'none' || !proxy.host || !proxy.port) {
+    // 直连：主进程直接查回显服务，同样能拿到出口 IP（如挂了全局 VPN/系统代理时）
+    return (await checkDirect()).ip;
+  }
   return (await checkViaBrowser(proxy, settings)).ip;
 }
 

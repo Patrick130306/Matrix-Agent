@@ -10,9 +10,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import type { Profile, ProfileInput } from '@shared/types';
-import { DEFAULT_PROFILE_TUNABLES } from '@shared/constants';
+import { DEFAULT_PROFILE_TUNABLES, PROXY_CHECK_CONCURRENCY } from '@shared/constants';
 import { deleteProfile, getProfile, getProfilesDir, listProfiles, upsertProfile } from './db';
 import { encryptString } from './secure-store';
+import { resolveProxyConfig } from './proxy-pool';
+import { checkProxyConfig } from './proxy-checker';
+import { suggestFingerprint } from './geo';
+import type { Settings } from '@shared/types';
 
 export class ProfileManager {
   constructor(private readonly closeBrowser: (profileId: string) => Promise<void>) {}
@@ -47,6 +51,73 @@ export class ProfileManager {
     const next: Profile = { ...existing, ...patch, id: existing.id, userDataDir: existing.userDataDir };
     upsertProfile(next);
     return next;
+  }
+
+  /**
+   * 批量创建 Profile（矩阵运营入口）：
+   * - 名称前缀 + 数量 N → 生成 N 个独立 Profile（新 id = 新指纹种子）；
+   * - 可选绑定代理池条目（poolIds 循环分配）；
+   * - 绑定代理时自动验证出口 IP 并生成匹配的时区/语言指纹（并发受限，防打爆回显服务）。
+   * 返回创建的 Profile 列表 + 成功生成指纹的数量。
+   */
+  async batchCreate(
+    input: { prefix: string; count: number; poolIds?: string[] },
+    settings: Settings,
+  ): Promise<{ profiles: Profile[]; fingerprintApplied: number }> {
+    const count = Math.min(50, Math.max(1, Math.floor(Number(input.count) || 1)));
+    const prefix = input.prefix?.trim() || '新 Profile';
+
+    const created: Profile[] = [];
+    for (let i = 0; i < count; i++) {
+      const poolId = input.poolIds?.length ? input.poolIds[i % input.poolIds.length] : undefined;
+      const profile = this.create({
+        ...DEFAULT_PROFILE_TUNABLES,
+        osPreset: 'win11-chrome',
+        proxyType: 'none',
+        languages: [...DEFAULT_PROFILE_TUNABLES.languages],
+        name: count > 1 ? `${prefix} ${i + 1}` : prefix,
+        proxyPoolId: poolId,
+      });
+      created.push(profile);
+    }
+
+    // 绑定代理的：并发验证出口 IP → 生成时区/语言指纹（直连不验证，保持默认指纹）
+    const toFingerprint = created.filter((p) => p.proxyPoolId);
+    if (toFingerprint.length === 0) return { profiles: created, fingerprintApplied: 0 };
+
+    let fingerprintApplied = 0;
+    let cursor = 0;
+    const worker = async (): Promise<void> => {
+      while (cursor < toFingerprint.length) {
+        const idx = cursor++;
+        const profile = toFingerprint[idx];
+        try {
+          const proxy = resolveProxyConfig(profile);
+          if (!proxy) continue;
+          const parsed = parseProxyServer(proxy.server);
+          if (!parsed) continue;
+          const ip = await checkProxyConfig(
+            { type: parsed.type, host: parsed.host, port: parsed.port, username: proxy.username, password: proxy.password },
+            settings,
+          );
+          const s = await suggestFingerprint(ip);
+          this.update(profile.id, {
+            timezone: s.timezone,
+            locale: s.locale,
+            languages: s.languages,
+            proxyCheck: { ok: true, ip, latencyMs: 0, checkedAt: new Date().toISOString() },
+          });
+          fingerprintApplied++;
+        } catch {
+          // 验证失败：保留默认指纹，代理条目标记失败由用户后续处理
+          continue;
+        }
+      }
+    };
+
+    const workers = Array.from({ length: Math.min(PROXY_CHECK_CONCURRENCY, toFingerprint.length) }, () => worker());
+    await Promise.all(workers);
+    return { profiles: created, fingerprintApplied };
   }
 
   /** 克隆：新 id + 新 userDataDir（不复制登录态目录，避免 Cookie 关联；需要登录态请用导出/导入场景自行评估）。 */
@@ -119,4 +190,11 @@ export class ProfileManager {
       proxyPasswordEnc: raw.proxyPasswordEnc ?? (raw.proxyPassword ? encryptString(raw.proxyPassword) : undefined),
     });
   }
+}
+
+/** 解析 "http://host:port" / "socks5://host:port" 形态的 server 字符串（批量创建自动指纹用） */
+function parseProxyServer(server: string): { type: 'http' | 'https' | 'socks5'; host: string; port: number } | null {
+  const m = server.match(/^(https?|socks5):\/\/([^:/]+):(\d+)$/);
+  if (!m) return null;
+  return { type: m[1] as 'http' | 'https' | 'socks5', host: m[2], port: Number(m[3]) };
 }

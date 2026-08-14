@@ -202,6 +202,20 @@ export function registerIpcHandlers(deps: IpcDeps, bridge: HumanConfirmBridge): 
   ipcMain.handle(IPC.profilesExport, (_e, id: string) => deps.profiles.export(id));
   ipcMain.handle(IPC.profilesImport, (_e, json: string) => deps.profiles.import(json));
 
+  // 批量创建：名称前缀 + 数量；可选绑定代理池（循环分配 + 自动按出口 IP 生成时区/语言指纹）
+  ipcMain.handle(
+    IPC.profilesBatchCreate,
+    async (_e, input: { prefix: string; count: number; poolIds?: string[] }) => {
+      const pool = listProxyPool();
+      const poolIds = (input.poolIds ?? []).filter((id) => pool.some((e) => e.id === id));
+      const result = await deps.profiles.batchCreate(
+        { prefix: input.prefix, count: input.count, poolIds: poolIds.length ? poolIds : undefined },
+        getSettings(),
+      );
+      return result;
+    },
+  );
+
   // 代理检测：验证代理可用性，返回出口 IP + 延迟，结果持久化到 Profile
   ipcMain.handle(IPC.profilesCheckProxy, async (_e, id: string) => {
     const profile = deps.profiles.get(id);

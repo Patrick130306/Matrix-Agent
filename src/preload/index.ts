@@ -56,6 +56,8 @@ const api = {
     selfTest: (id: string) => invoke(IPC.profilesSelfTest, id),
     export: (id: string) => invoke<string>(IPC.profilesExport, id),
     import: (json: string) => invoke<Profile>(IPC.profilesImport, json),
+    batchCreate: (input: { prefix: string; count: number; poolIds?: string[] }) =>
+      invoke<{ profiles: Profile[]; fingerprintApplied: number }>(IPC.profilesBatchCreate, input),
     checkProxy: (id: string) => invoke<ProxyCheckResult>(IPC.profilesCheckProxy, id),
     autoFingerprint: (proxy: {
       type: ProxyType;

@@ -17,6 +17,7 @@ export const IPC = {
   profilesSelfTest: 'profiles:self-test', // 打开指纹检测页
   profilesExport: 'profiles:export',
   profilesImport: 'profiles:import',
+  profilesBatchCreate: 'profiles:batch-create', // 批量创建（可选代理池联动自动指纹）
   profilesCheckProxy: 'profiles:check-proxy', // 代理/直连出口 IP + 延迟检测
   profilesAutoFingerprint: 'profiles:auto-fingerprint', // 根据代理出口 IP 生成时区/语言指纹建议
   profilesExportCookies: 'profiles:export-cookies',

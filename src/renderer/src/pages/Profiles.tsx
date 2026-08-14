@@ -3,7 +3,7 @@ import type { Profile, ProfileGroup, ProfileInput } from '@shared/types';
 import { OS_PRESET_LIST } from '@shared/presets';
 import { DEFAULT_PROFILE_TUNABLES } from '@shared/constants';
 import { matrix } from '../api';
-import { Button, Card, EmptyState, Field, IconButton, Modal, PageHeader, inputCls } from '../components/ui';
+import { Button, Card, CheckCircle, EmptyState, Field, IconButton, Modal, PageHeader, inputCls } from '../components/ui';
 import { Icon } from '../components/icons';
 import { confirmDialog, promptDialog, toast } from '../components/feedback';
 import { LoginStatePanel } from '../components/LoginStatePanel';
@@ -12,6 +12,7 @@ import { LoginStatePanel } from '../components/LoginStatePanel';
 export function ProfilesPage(props: { profiles: Profile[]; groups: ProfileGroup[]; refresh: () => void }) {
   const [editing, setEditing] = useState<Profile | 'new' | null>(null);
   const [importing, setImporting] = useState(false);
+  const [batchCreating, setBatchCreating] = useState(false);
   const [loginPanelFor, setLoginPanelFor] = useState<Profile | null>(null);
   const [groupFilter, setGroupFilter] = useState(''); // '' = 全部；'__none__' = 未分组；其余 = 分组 id
   const [managingGroups, setManagingGroups] = useState(false);
@@ -102,6 +103,9 @@ export function ProfilesPage(props: { profiles: Profile[]; groups: ProfileGroup[
           <>
             <Button variant="outline" leftIcon="Upload" onClick={() => setImporting(true)}>
               导入
+            </Button>
+            <Button variant="outline" leftIcon="Group" onClick={() => setBatchCreating(true)}>
+              批量创建
             </Button>
             <Button variant="primary" leftIcon="Add" onClick={() => setEditing('new')}>
               新建 Profile
@@ -268,6 +272,19 @@ export function ProfilesPage(props: { profiles: Profile[]; groups: ProfileGroup[
             }}
           />
         </Modal>
+      )}
+
+      {batchCreating && (
+        <BatchCreateModal
+          onClose={() => setBatchCreating(false)}
+          onCreated={(n, fp) => {
+            setBatchCreating(false);
+            props.refresh();
+            toast.success(
+              `已创建 ${n} 个 Profile${fp > 0 ? `，${fp} 个已按出口 IP 生成指纹` : ''}`,
+            );
+          }}
+        />
       )}
 
       {loginPanelFor && (
@@ -520,15 +537,12 @@ function ProfileForm(props: { profile: Profile | null; groups: ProfileGroup[]; o
 
   const set = (k: keyof typeof form, v: string | number) => setForm((f) => ({ ...f, [k]: v }));
 
-  /** 根据代理出口 IP 自动生成时区/语言指纹（回填表单，保存时入库） */
+  /** 根据出口 IP 自动生成时区/语言指纹（回填表单，保存时入库）。直连也支持（取本机出口 IP）。 */
   const autoFingerprint = async () => {
-    if (form.proxyType === 'none' || !form.proxyHost.trim() || !form.proxyPort) {
-      toast.error('请先填写代理类型 / 主机 / 端口');
-      return;
-    }
     setFpBusy(true);
     setFpHint('');
     try {
+      const isDirect = form.proxyType === 'none' || !form.proxyHost.trim() || !form.proxyPort;
       const s = await matrix.profiles.autoFingerprint({
         type: form.proxyType as ProfileInput['proxyType'],
         host: form.proxyHost.trim(),
@@ -540,7 +554,7 @@ function ProfileForm(props: { profile: Profile | null; groups: ProfileGroup[]; o
       set('locale', s.locale);
       set('languages', s.languages.join(', '));
       setFpHint(
-        `已根据出口 IP ${s.ip}（${s.country}${s.city ? ' · ' + s.city : ''}）生成：时区 ${s.timezone}，语言 ${s.languages.join(', ')}`,
+        `已根据${isDirect ? '本机' : '代理'}出口 IP ${s.ip}（${s.country}${s.city ? ' · ' + s.city : ''}）生成：时区 ${s.timezone}，语言 ${s.languages.join(', ')}`,
       );
     } catch (err) {
       toast.error(`生成失败：${(err as Error).message}`);
@@ -729,6 +743,98 @@ function ProfileForm(props: { profile: Profile | null; groups: ProfileGroup[]; o
             </div>
           )}
         </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ------------------------------------------------------------------ 批量创建 Profile
+
+/** 批量创建：名称前缀 + 数量；可选绑定代理池（自动分配 + 按出口 IP 生成时区/语言指纹） */
+function BatchCreateModal(props: { onClose: () => void; onCreated: (count: number, fingerprintApplied: number) => void }) {
+  const [prefix, setPrefix] = useState('');
+  const [count, setCount] = useState(5);
+  const [usePool, setUsePool] = useState(false);
+  const [poolInfo, setPoolInfo] = useState<{ total: number; ok: number }>({ total: 0, ok: 0 });
+  const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    void matrix.proxyPool.list().then((list) =>
+      setPoolInfo({ total: list.length, ok: list.filter((e) => e.status === 'ok').length }),
+    );
+  }, []);
+
+  const create = async () => {
+    if (!prefix.trim()) {
+      toast.error('请填写名称前缀');
+      return;
+    }
+    if (usePool && poolInfo.total === 0) {
+      toast.error('代理池为空，请先到 设置 → 代理池 导入代理');
+      return;
+    }
+    setCreating(true);
+    try {
+      const poolIds = usePool ? (await matrix.proxyPool.list()).map((e) => e.id) : undefined;
+      const r = await matrix.profiles.batchCreate({
+        prefix: prefix.trim(),
+        count,
+        poolIds,
+      });
+      props.onCreated(r.profiles.length, r.fingerprintApplied);
+    } catch (err) {
+      toast.error(`批量创建失败：${(err as Error).message}`);
+      setCreating(false);
+    }
+  };
+
+  return (
+    <Modal
+      title="批量创建 Profile"
+      onClose={props.onClose}
+      footer={
+        <>
+          <Button onClick={props.onClose}>取消</Button>
+          <Button variant="primary" leftIcon="Add" disabled={creating} onClick={() => void create()}>
+            {creating ? '创建中…' : `创建 ${count} 个`}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="名称前缀" hint="自动编号为「前缀 1 / 前缀 2 …」">
+            <input className={inputCls} value={prefix} onChange={(e) => setPrefix(e.target.value)} placeholder="店铺A" />
+          </Field>
+          <Field label="数量（1–50）">
+            <input
+              type="number"
+              min={1}
+              max={50}
+              className={inputCls}
+              value={count}
+              onChange={(e) => setCount(Math.min(50, Math.max(1, Number(e.target.value) || 1)))}
+            />
+          </Field>
+        </div>
+        <div
+          className="flex cursor-pointer items-start gap-2 rounded-[10px] bg-[var(--fill-1)] px-3.5 py-3"
+          onClick={() => setUsePool(!usePool)}
+        >
+          <CheckCircle size={16} checked={usePool} />
+          <div className="min-w-0">
+            <p className="text-[13px] text-slate-300">绑定代理池（推荐）</p>
+            <p className="mt-0.5 text-xs leading-4 text-slate-500">
+              自动循环分配池内代理，并逐个验证出口 IP、生成匹配的时区/语言指纹（每个 Profile 独立环境）
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              当前池：{poolInfo.total} 条{poolInfo.ok > 0 ? `（${poolInfo.ok} 条已验证可用）` : '（未验证）'}
+            </p>
+          </div>
+        </div>
+        <p className="text-xs leading-4 text-slate-500">
+          每个 Profile 都是全新的隔离浏览器环境（独立指纹种子 / userDataDir）。代理池在「设置 → 代理池」导入管理。
+        </p>
       </div>
     </Modal>
   );
