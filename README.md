@@ -10,10 +10,12 @@ AI-Native 浏览器集群 —— 把「指纹浏览器」和「AI Agent」合二
 
 **指纹浏览器集群**
 - 多 Profile 隔离：每个 Profile 独立 `userDataDir`、独立指纹（osPreset 派生 + 种子化噪声）、独立代理
+- **批量创建**：名称前缀 + 数量一键生成 N 个独立 Profile；可选绑定代理池，自动分配代理并逐个按出口 IP 生成匹配指纹
+- **全局代理池**：批量导入（host:port:user:pass / URL 格式）→ 一键并发验证（出口 IP + 延迟）→ Profile 绑定池内条目自动分配
 - Profile 分组管理、克隆、导入导出（含 Cookies 导入导出）
 - 内置「指纹自测」：一键打开 bot.sannysoft.com 肉眼核对指纹
-- 反检测补丁：webdriver 抹除 + 自动化标志禁用 + permissions/plugins 保真 + Accept-Language q 值（首档 stealth）
-- 代理出口指纹联动：填写代理后一键「根据出口 IP 生成指纹」，自动把时区 / Locale / 语言对齐到代理真实地理位置
+- 反检测体系：webdriver 抹除 + 自动化标志禁用 + permissions/plugins 保真 + Accept-Language q 值 + **WebGL readPixels 种子噪声** + **拟人行为模拟**（思考延迟 / hover 预热 / 逐字符输入节奏 / 分段滚动，设置可关）
+- 代理出口指纹联动：填写代理后一键「根据出口 IP 生成指纹」，自动把时区 / Locale / 语言对齐到出口 IP 地理位置（**直连也支持**，取本机出口 IP）
 - 登录态检测：自定义检测规则，任务前自动验证登录状态
 - 代理连通性检测：出口 IP + 延迟一键测
 
@@ -22,26 +24,30 @@ AI-Native 浏览器集群 —— 把「指纹浏览器」和「AI Agent」合二
 - 批量任务：一条指令下发到多个 Profile 并行执行，结果聚合
 - 多 Profile 切换：任务可携带 Profile 池，Agent 执行中按需 `switch_profile` 切换操作对象（原浏览器保持打开）
 - 流程录制与回放：AI 探路一次成功后自动录制动作序列；回放**完全不调 LLM**，xpath 失效时按 tag+文本模糊匹配自愈，自愈失败才交回 LLM 接管
+- **流程可视化编辑**：步骤上移 / 下移 / 删除 / 改参数（URL、输入文本、选项、等待时长），保存后回放按新顺序执行
 - 上下文管理：近期 N 步完整快照 + 远期压缩摘要，50K 字符预算自动裁剪
 - 防卡死：连续 N 步页面状态指纹不变自动暂停并询问人工
 
 **任务调度与留痕**
 - 队列 + 双信号量并发控制（浏览器并发保护本机性能、LLM 并发保护 API 速率），同 Profile 串行互斥
 - 失败重试（默认同 Profile 重试，登录态绑定 userDataDir）、崩溃恢复（Recovery 启动序列：任务修复 / 孤儿进程清理 / 锁文件）
+- **任务仪表盘**：成功率 / 平均耗时 / LLM token 用量 / 成本估算（设置里填单价）
 - 任务历史：每步截图 + 推理过程 + 动作记录，可点开回溯完整执行过程
 - 实时查看：任务执行中可一键把对应浏览器窗口置前
 
 **人机协同**
 - 验证码 / 人机验证自动暂停并弹窗：展示截图 + AI 推理 + 最近动作，真人接手完成验证后继续（或终止）
-- LLM 多次非法输出、疑似卡死、页面出现验证码关键词都会触发人工确认
+- 接管后智能豁免：同一验证码不会反复弹窗打断，LLM 非法输出、疑似卡死同样触发人工确认
 
 **自动化与通知**
 - 定时任务：interval（每 N 分钟）/ daily（每日 HH:MM）两种规则，多 Profile 自动走批量任务
+- **结构化采集**：内置模板（电商商品 / 订单 / 社媒 / 搜索）+ 自定义模板，多页翻页采集，结果自动合并为表格并导出 CSV
 - 终态通知：桌面通知 + Webhook（钉钉 / 企微 / 自建服务），批量子任务聚合通知不刷屏
 
-**安全**
+**外观与安全**
+- **亮色 / 深色主题**：设置页一键切换，立即生效，两套主题同等精致
 - LLM Key 等敏感配置经 Electron `safeStorage` 加密存储（secure-store）
-- 任务模板、流程库、Profile 分组等全部持久化在本地 SQLite
+- 任务模板、流程库、Profile 分组、代理池等全部持久化在本地 SQLite
 
 ## 技术栈
 
@@ -74,12 +80,8 @@ npm run dev        # 开发模式（electron-vite，带 HMR）
 ```bash
 npm run typecheck  # TypeScript 类型检查
 npm run build      # 构建产物到 dist/
-npm run dist       # 打包 Windows 安装包（见 PACKAGING.md，有坑，先读再打）
+npm run dist       # 打包 Windows 安装包，产物在 release/
 ```
-
-### 打包
-
-Windows NSIS 安装包打包流程、镜像配置、已踩过的坑（node-gyp / GitHub 下载失败 / 缓存灌注），**详见 [PACKAGING.md](PACKAGING.md)**。产物：`release/Matrix Agent Setup 0.2.0.exe`。
 
 ## 使用指南
 
