@@ -3,7 +3,7 @@ import os
 import zipfile
 
 SRC = r'D:\kimi_workspaces\matrix_agent\matrix-agent'
-OUT = os.path.join(SRC, 'release', 'matrix-agent-source.zip')
+OUT = os.path.join(SRC, 'release', 'matrix-agent-0.3.0-source.zip')
 EXCLUDE_DIRS = {'node_modules', 'release', 'dist', '.git', 'logs', 'profiles'}
 EXCLUDE_FILES = {'release-log.txt'}
 
