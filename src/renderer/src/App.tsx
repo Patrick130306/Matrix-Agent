@@ -103,7 +103,7 @@ export default function App() {
           ))}
         </ul>
         <div className="flex items-center justify-between border-t border-ink-600 px-4 py-3">
-          <span className="text-xs leading-4 text-slate-600">MVP v3.0</span>
+          <span className="text-xs leading-4 text-slate-600">MVP v4.0</span>
           <button
             type="button"
             title={theme === 'dark' ? '切换到亮色主题' : '切换到暗色主题'}
