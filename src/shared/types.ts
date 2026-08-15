@@ -186,8 +186,8 @@ export interface Settings {
 
 export type ThemeMode = 'dark' | 'light';
 
-/** 渲染进程提交上来的设置表单（密钥字段为明文，主进程负责加密） */
-export type SettingsInput = Omit<Settings, 'llmApiKeyEnc'> & { llmApiKey?: string };
+/** 渲染进程提交上来的设置（支持部分更新：主进程与当前值 merge；密钥字段为明文，主进程负责加密） */
+export type SettingsInput = Partial<Omit<Settings, 'llmApiKeyEnc'>> & { llmApiKey?: string };
 
 // ---------------------------------------------------------------- Agent
 
