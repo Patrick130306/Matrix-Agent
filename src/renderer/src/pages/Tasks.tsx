@@ -231,19 +231,60 @@ export function TasksPage(props: { tasks: TaskRow[]; profiles: Profile[]; refres
               {(detail.steps ?? []).length === 0 && <p className="text-slate-500">暂无步骤记录</p>}
             </div>
             {detail.type === 'batch' && (
-              <div className="space-y-1.5">
-                <p className="text-[13px] font-medium text-slate-300">子任务明细</p>
-                {props.tasks
-                  .filter((c) => c.parentId === detail.id)
-                  .map((c) => (
-                    <div key={c.id} className="flex items-center gap-2 rounded-[10px] bg-[var(--fill-1)] px-3 py-2 text-xs">
-                      <StatusBadge status={c.status} />
-                      <span className="text-slate-300">{profileName(c.profileId)}</span>
-                      <span className="truncate text-slate-500">
-                        {c.result?.final?.slice(0, 60) ?? c.errorMessage ?? ''}
+              <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-[13px] font-medium text-slate-300">批量结果对比（{props.tasks.filter((c) => c.parentId === detail.id).length} 个环境）</p>
+                  {(() => {
+                    const children = props.tasks.filter((c) => c.parentId === detail.id);
+                    const done = children.filter((c) => c.status === 'completed').length;
+                    return (
+                      <span className="text-xs text-slate-500">
+                        成功 <span className="text-ok">{done}</span> / {children.length}
                       </span>
-                    </div>
-                  ))}
+                    );
+                  })()}
+                </div>
+                <div className="max-h-80 overflow-auto rounded-[10px] border border-ink-600">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-ink-700">
+                      <tr className="border-b border-ink-600 text-left">
+                        <th className="px-3 py-2 font-medium text-slate-500">Profile</th>
+                        <th className="px-3 py-2 font-medium text-slate-500">状态</th>
+                        <th className="px-3 py-2 font-medium text-slate-500">结果 / 错误</th>
+                        <th className="px-3 py-2 font-medium text-slate-500">耗时</th>
+                        <th className="px-3 py-2 font-medium text-slate-500">Token</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {props.tasks
+                        .filter((c) => c.parentId === detail.id)
+                        .map((c) => (
+                          <tr key={c.id} className="border-b border-[var(--line-1)] last:border-0">
+                            <td className="whitespace-nowrap px-3 py-2 text-slate-300">{profileName(c.profileId)}</td>
+                            <td className="px-3 py-2">
+                              <StatusBadge status={c.status} />
+                            </td>
+                            <td className="max-w-64 truncate px-3 py-2 text-slate-400" title={c.result?.final ?? c.errorMessage ?? ''}>
+                              {c.status === 'completed'
+                                ? (c.result?.final?.split('\n')[0].slice(0, 80) ?? '（无文本结果）')
+                                : (c.errorMessage ?? '—')}
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-2 text-slate-400">
+                              {c.startedAt && c.completedAt
+                                ? (() => {
+                                    const sec = Math.round((new Date(c.completedAt).getTime() - new Date(c.startedAt).getTime()) / 1000);
+                                    return sec < 60 ? `${sec}s` : `${Math.floor(sec / 60)}m${sec % 60}s`;
+                                  })()
+                                : '—'}
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-2 text-slate-400">
+                              {c.llmUsage ? `${Math.round((c.llmUsage.promptTokens + c.llmUsage.completionTokens) / 100) / 10}k` : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
             {detail.result?.final && <CollectResultView final={detail.result.final} />}

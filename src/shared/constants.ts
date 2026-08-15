@@ -73,6 +73,7 @@ export const IPC = {
   templatesDelete: 'templates:delete',
   // system
   systemDetectChrome: 'system:detect-chrome',
+  systemCheckUpdate: 'system:check-update', // 检查 GitHub Release 新版本
 } as const;
 
 /** 主进程 → 渲染进程 事件通道 */
@@ -109,6 +110,7 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'dark', // 深色 / 亮色（默认深色，与现有 UI 一致）
   behaviorSimulation: true, // 拟人行为模拟（思考延迟 / hover 预热等），默认开
   llmPricePer1kTokens: 0, // LLM 单价（元/千 token），0 = 不估算
+  checkUpdates: true, // 启动时检查 GitHub Release 新版本
 };
 
 /** §7.2 序列化上限 */
@@ -148,8 +150,10 @@ export const PROXY_CHECK_CONCURRENCY = 4;
 /** 单个代理验证超时（ms） */
 export const PROXY_CHECK_TIMEOUT_MS = 25_000;
 
-/**
- * 内置结构化采集模板（builtin = true，不可删除）。
+/** Profile.proxyPoolId 特殊值：绑定整个代理池并自动轮换（每次启动取闲置最久的可用代理） */
+export const PROXY_POOL_AUTO_ID = '__pool__';
+
+/** 内置结构化采集模板（builtin = true，不可删除）。
  * 用户在「自动化 → 结构化采集」里一键套用：fields 决定提取字段，instruction 拼进任务指令。
  */
 export const EXTRACT_PRESET_TEMPLATES: {

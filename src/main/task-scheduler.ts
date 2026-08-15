@@ -17,6 +17,7 @@
 import crypto from 'node:crypto';
 import type { Profile, Settings, Task, TaskResult } from '@shared/types';
 import { RETRY_BASE_DELAY_MS, TASK_MAX_RETRIES } from '@shared/constants';
+import { POOL_AUTO_ID, markProxyFailed } from './proxy-pool';
 import {
   getFlow,
   getProfile,
@@ -467,6 +468,14 @@ export class TaskScheduler implements ProfilePool {
         }
 
         const message = (err as Error).message.slice(0, 500);
+        // 代理池代理启动失败：标记不可用（固定条模式），下次分配 LRU 自动换池内其他可用代理
+        if (profile.proxyPoolId && profile.proxyPoolId !== POOL_AUTO_ID) {
+          try {
+            markProxyFailed(profile.proxyPoolId, message);
+          } catch {
+            /* 标记失败不阻塞主流程 */
+          }
+        }
         task.retryCount = attempt + 1;
         console.warn(`[scheduler] 任务 ${task.id} 第 ${task.retryCount} 次失败: ${message}`);
 

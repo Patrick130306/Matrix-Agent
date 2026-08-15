@@ -227,6 +227,13 @@ const MIGRATIONS: { version: number; sql: string }[] = [
       );
     `,
   },
+  {
+    // v8：代理池轮换（LRU 分配需要记录最近分配时间）
+    version: 8,
+    sql: `
+      ALTER TABLE proxy_pool ADD COLUMN last_assigned_at TEXT;
+    `,
+  },
 ];
 
 export function initDatabase(): Database.Database {
@@ -915,6 +922,7 @@ interface ProxyPoolRow {
   latency_ms: number | null;
   last_error: string | null;
   checked_at: string | null;
+  last_assigned_at: string | null;
   created_at: string;
 }
 
@@ -932,6 +940,7 @@ function rowToProxyEntry(r: ProxyPoolRow): ProxyPoolEntry {
     latencyMs: r.latency_ms ?? undefined,
     lastError: r.last_error ?? undefined,
     checkedAt: r.checked_at ?? undefined,
+    lastAssignedAt: r.last_assigned_at ?? undefined,
     createdAt: r.created_at,
   };
 }
@@ -949,8 +958,8 @@ export function getProxyEntry(id: string): ProxyPoolEntry | null {
 export function upsertProxyEntry(e: ProxyPoolEntry): void {
   getDb()
     .prepare(
-      `INSERT INTO proxy_pool (id, label, type, host, port, username, password_enc, status, ip, latency_ms, last_error, checked_at, created_at)
-       VALUES (@id, @label, @type, @host, @port, @username, @password_enc, @status, @ip, @latency_ms, @last_error, @checked_at, @created_at)
+      `INSERT INTO proxy_pool (id, label, type, host, port, username, password_enc, status, ip, latency_ms, last_error, checked_at, last_assigned_at, created_at)
+       VALUES (@id, @label, @type, @host, @port, @username, @password_enc, @status, @ip, @latency_ms, @last_error, @checked_at, @last_assigned_at, @created_at)
        ON CONFLICT(id) DO UPDATE SET
          label = excluded.label,
          type = excluded.type,
@@ -962,7 +971,8 @@ export function upsertProxyEntry(e: ProxyPoolEntry): void {
          ip = excluded.ip,
          latency_ms = excluded.latency_ms,
          last_error = excluded.last_error,
-         checked_at = excluded.checked_at`,
+         checked_at = excluded.checked_at,
+         last_assigned_at = excluded.last_assigned_at`,
     )
     .run({
       id: e.id,
@@ -977,6 +987,7 @@ export function upsertProxyEntry(e: ProxyPoolEntry): void {
       latency_ms: e.latencyMs ?? null,
       last_error: e.lastError ?? null,
       checked_at: e.checkedAt ?? null,
+      last_assigned_at: e.lastAssignedAt ?? null,
       created_at: e.createdAt,
     });
 }

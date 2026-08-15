@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Profile, ProfileGroup, ProfileInput } from '@shared/types';
 import { OS_PRESET_LIST } from '@shared/presets';
-import { DEFAULT_PROFILE_TUNABLES } from '@shared/constants';
+import { DEFAULT_PROFILE_TUNABLES, PROXY_POOL_AUTO_ID } from '@shared/constants';
 import { matrix } from '../api';
 import { Button, Card, CheckCircle, EmptyState, Field, IconButton, Modal, PageHeader, inputCls } from '../components/ui';
 import { Icon } from '../components/icons';
@@ -688,28 +688,32 @@ function ProfileForm(props: { profile: Profile | null; groups: ProfileGroup[]; o
           {fpHint && <p className="mb-2 text-[12px] leading-5 text-ok">{fpHint}</p>}
           <Field
             label="代理来源"
-            hint="选「代理池」后启动时自动从池中取可用代理（忽略下方手动配置）；池在 设置 → 代理池 管理"
+            hint="「代理池 · 自动轮换」每次启动自动取池内闲置最久的可用代理（任务间换 IP）；「固定条目」锁定池中某一条；池在 设置 → 代理池 管理"
           >
             <select
               className={inputCls}
-              value={form.proxyPoolId ? 'pool' : 'manual'}
+              value={form.proxyPoolId === PROXY_POOL_AUTO_ID ? 'auto' : form.proxyPoolId ? 'fixed' : 'manual'}
               onChange={(e) => {
-                // 切换来源：池 ↔ 手动
-                if (e.target.value === 'pool') {
-                  if (poolEntries.length > 0) set('proxyPoolId', poolEntries[0].id);
-                } else {
-                  set('proxyPoolId', '');
-                }
+                if (e.target.value === 'manual') set('proxyPoolId', '');
+                else if (e.target.value === 'auto') set('proxyPoolId', PROXY_POOL_AUTO_ID);
+                else if (poolEntries.length > 0) set('proxyPoolId', poolEntries[0].id);
               }}
             >
               <option value="manual">手动配置（下方）</option>
-              <option value="pool" disabled={poolEntries.length === 0}>
-                代理池{poolEntries.length === 0 ? '（池为空，先去设置页导入）' : `（${poolEntries.length} 条可用）`}
+              <option value="auto" disabled={poolEntries.length === 0}>
+                代理池 · 自动轮换{poolEntries.length === 0 ? '（池为空，先去设置页导入）' : `（${poolEntries.length} 条可用）`}
+              </option>
+              <option value="fixed" disabled={poolEntries.length === 0}>
+                代理池 · 固定一条
               </option>
             </select>
           </Field>
-          {form.proxyPoolId ? (
-            <Field label="使用的代理条目">
+          {form.proxyPoolId === PROXY_POOL_AUTO_ID ? (
+            <p className="rounded-[10px] bg-info-soft px-3.5 py-2.5 text-xs leading-5 text-info">
+              已绑定整个代理池：每次启动浏览器自动轮换（优先闲置最久的可用代理）；单条失效自动切换，无需手动干预。
+            </p>
+          ) : form.proxyPoolId ? (
+            <Field label="使用的代理条目（固定）">
               <select className={inputCls} value={form.proxyPoolId} onChange={(e) => set('proxyPoolId', e.target.value)}>
                 {poolEntries.map((e) => (
                   <option key={e.id} value={e.id}>

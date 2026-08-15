@@ -5,6 +5,13 @@
   "asarUnpack": ["**/node_modules/better-sqlite3/**"],
   "npmRebuild": false,
   "files": ["dist/**", "package.json"],
+  "extraResources": [
+    {
+      "from": "${LOCALAPPDATA}/ms-playwright/chromium-1228",
+      "to": "chromium",
+      "filter": ["chrome-win64/**"]
+    }
+  ],
   "directories": { "output": "release", "buildResources": "build" },
   "win": {
     "target": ["nsis"],

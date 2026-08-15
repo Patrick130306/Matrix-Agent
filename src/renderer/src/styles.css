@@ -59,6 +59,7 @@
   --check-on-bg: rgba(255, 255, 255, 0.88);
   --check-on-fg: #121212;
   --danger-soft-strong: rgba(255, 71, 86, 0.22);
+  --info-soft-strong: rgba(26, 136, 255, 0.22);
 }
 
 html.light {
@@ -113,6 +114,7 @@ html.light {
   --check-on-bg: var(--accent);
   --check-on-fg: #ffffff;
   --danger-soft-strong: rgba(220, 38, 38, 0.16);
+  --info-soft-strong: rgba(26, 110, 224, 0.16);
 }
 
 html,

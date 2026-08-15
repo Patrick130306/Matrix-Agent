@@ -182,6 +182,9 @@ export interface Settings {
   theme: ThemeMode; // 深色 / 亮色（默认深色）
   behaviorSimulation: boolean; // 拟人行为模拟（思考延迟 / hover 预热等），默认开
   llmPricePer1kTokens: number; // LLM 单价（元/千 token），仪表盘成本估算用；0 = 不估算
+
+  // 更新检查
+  checkUpdates: boolean; // 启动时检查 GitHub Release 新版本（默认开）
 }
 
 export type ThemeMode = 'dark' | 'light';
@@ -265,10 +268,11 @@ export interface LlmTestResult {
 
 // ---------------------------------------------------------------- 定时任务 / 模板
 
-/** 定时规则（MVP：间隔 N 分钟 或 每日定点） */
+/** 定时规则：间隔 / 每日定点 / cron 表达式（"分 时 日 月 周"，如 "0 9 * * 1-5"） */
 export type ScheduleSpec =
   | { kind: 'interval'; everyMin: number } // 每 N 分钟
-  | { kind: 'daily'; hhmm: string }; // 每日 HH:MM（本地时间）
+  | { kind: 'daily'; hhmm: string } // 每日 HH:MM（本地时间）
+  | { kind: 'cron'; expr: string }; // 5 段 cron（本地时间）
 
 export interface Schedule {
   id: string;
@@ -369,6 +373,8 @@ export interface ProxyPoolEntry {
   latencyMs?: number;
   lastError?: string;
   checkedAt?: string;
+  /** 最近一次被 Profile 分配使用的时间（轮换策略：优先分配闲置最久的可用代理） */
+  lastAssignedAt?: string;
   createdAt: string;
 }
 

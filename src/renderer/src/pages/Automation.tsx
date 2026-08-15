@@ -79,7 +79,16 @@ export function AutomationPage(props: { profiles: Profile[] }) {
                       {s.name}
                     </td>
                     <td className="px-4 py-3 text-[13px] text-slate-400">
-                      {s.spec.kind === 'interval' ? `每 ${s.spec.everyMin} 分钟` : `每日 ${s.spec.hhmm}`}
+                      {s.spec.kind === 'interval'
+                        ? `每 ${s.spec.everyMin} 分钟`
+                        : s.spec.kind === 'daily'
+                          ? `每日 ${s.spec.hhmm}`
+                          : <code className="font-mono">{s.spec.expr}</code>}
+                      {s.enabled && s.nextRunAt && new Date(s.nextRunAt).getTime() < Date.now() - 2 * 60_000 && (
+                        <span className="ml-1.5 rounded bg-warn-soft px-1.5 py-0.5 text-[11px] text-warn" title="预定时间已过（可能因关机错过），下次启动会自动补跑一次">
+                          待补跑
+                        </span>
+                      )}
                     </td>
                     <td className="max-w-40 truncate px-4 py-3 text-[13px] text-slate-400">
                       {s.profileIds.length > 0 ? s.profileIds.map(profileName).join('、') : '自动分配'}
@@ -660,9 +669,10 @@ function ScheduleForm(props: { profiles: Profile[]; onClose: () => void; onSaved
   const [instruction, setInstruction] = useState('');
   const [requiresAuth, setRequiresAuth] = useState(true);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [kind, setKind] = useState<'interval' | 'daily'>('daily');
+  const [kind, setKind] = useState<'interval' | 'daily' | 'cron'>('daily');
   const [everyMin, setEveryMin] = useState(60);
   const [hhmm, setHhmm] = useState('09:00');
+  const [cronExpr, setCronExpr] = useState('0 9 * * 1-5');
 
   const toggle = (id: string) =>
     setSelectedIds((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
@@ -677,7 +687,12 @@ function ScheduleForm(props: { profiles: Profile[]; onClose: () => void; onSaved
       instruction: instruction.trim(),
       requiresAuth,
       profileIds: selectedIds,
-      spec: kind === 'interval' ? { kind, everyMin } : { kind, hhmm },
+      spec:
+        kind === 'interval'
+          ? { kind, everyMin }
+          : kind === 'daily'
+            ? { kind, hhmm }
+            : { kind, expr: cronExpr },
       enabled: true,
     };
     try {
@@ -710,13 +725,14 @@ function ScheduleForm(props: { profiles: Profile[]; onClose: () => void; onSaved
           </Field>
           <Field label="规则">
             <div className="flex gap-2">
-              <select className={inputCls} value={kind} onChange={(e) => setKind(e.target.value as 'interval' | 'daily')}>
+              <select className={inputCls} value={kind} onChange={(e) => setKind(e.target.value as 'interval' | 'daily' | 'cron')}>
                 <option value="daily">每日定点</option>
                 <option value="interval">按间隔</option>
+                <option value="cron">cron 表达式</option>
               </select>
               {kind === 'daily' ? (
                 <input type="time" className={inputCls} value={hhmm} onChange={(e) => setHhmm(e.target.value)} />
-              ) : (
+              ) : kind === 'interval' ? (
                 <div className="flex items-center gap-2">
                   <span className="shrink-0 text-xs text-slate-400">每</span>
                   <input
@@ -728,8 +744,21 @@ function ScheduleForm(props: { profiles: Profile[]; onClose: () => void; onSaved
                   />
                   <span className="shrink-0 text-xs text-slate-400">分钟</span>
                 </div>
+              ) : (
+                <input
+                  className={`${inputCls} font-mono`}
+                  value={cronExpr}
+                  onChange={(e) => setCronExpr(e.target.value)}
+                  placeholder="分 时 日 月 周，如 0 9 * * 1-5"
+                  title="5 段 cron：分钟 小时 日 月 星期(0-6，0=周日)。支持 * / 数字 / a-b / a,b / */n"
+                />
               )}
             </div>
+            {kind === 'cron' && (
+              <span className="mt-1.5 block text-xs leading-4 text-slate-500">
+                5 段：分 时 日 月 周（0-6，0=周日）。示例：工作日早 9 点 <code className="font-mono">0 9 * * 1-5</code>；每 30 分钟 <code className="font-mono">*/30 * * * *</code>
+              </span>
+            )}
           </Field>
         </div>
         <Field label="任务指令">

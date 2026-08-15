@@ -25,6 +25,7 @@ interface SettingsView {
   theme: 'dark' | 'light';
   behaviorSimulation: boolean;
   llmPricePer1kTokens: number;
+  checkUpdates: boolean;
   hasApiKey: boolean;
 }
 
@@ -35,6 +36,13 @@ export function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [testResult, setTestResult] = useState<string>('');
   const [webhookTest, setWebhookTest] = useState<string>('');
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateResult, setUpdateResult] = useState<{
+    current: string;
+    latest: string;
+    hasUpdate: boolean;
+    url: string;
+  } | null>(null);
   const [chromeInfo, setChromeInfo] = useState<{ detected: string | null; current: string | null } | null>(null);
 
   useEffect(() => {
@@ -63,6 +71,19 @@ export function SettingsPage() {
     setTestResult('测试中…');
     const r = await matrix.settings.testLlm();
     setTestResult(r.ok ? `✓ 连通正常（${r.model}，${r.latencyMs}ms）` : `✗ ${r.error}`);
+  };
+
+  const checkUpdate = async () => {
+    setCheckingUpdate(true);
+    try {
+      const r = await matrix.system.checkUpdate();
+      setUpdateResult(r);
+    } catch (err) {
+      setUpdateResult(null);
+      setTestResult(`✗ 检查失败：${(err as Error).message}`);
+    } finally {
+      setCheckingUpdate(false);
+    }
   };
 
   const testWebhook = async () => {
@@ -245,6 +266,38 @@ export function SettingsPage() {
 
         <Section title="代理池" desc="全局代理列表：批量导入 → 一键验证 → 在 Profile 编辑里选择「使用代理池」自动分配">
           <ProxyPoolPanel />
+        </Section>
+
+        <Section title="更新">
+          <ToggleRow
+            label="启动时检查新版本"
+            hint="检测到 GitHub 有新 Release 时提示下载；网络不通自动跳过"
+            checked={view.checkUpdates}
+            onChange={(v) => set('checkUpdates', v)}
+          />
+          <div className="flex items-center gap-3">
+            <Button variant="outline" leftIcon="Update" onClick={() => void checkUpdate()} disabled={checkingUpdate}>
+              {checkingUpdate ? '检查中…' : '立即检查更新'}
+            </Button>
+            {updateResult && (
+              <span className={`text-xs ${updateResult.hasUpdate ? 'text-info' : 'text-ok'}`}>
+                {updateResult.hasUpdate
+                  ? `发现新版本 ${updateResult.latest}（当前 ${updateResult.current}）→ 点击下载`
+                  : `当前已是最新版本 v${updateResult.current}`}
+              </span>
+            )}
+            {updateResult?.hasUpdate && (
+              <a
+                href={updateResult.url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-[26px] items-center rounded-lg bg-info-soft px-2.5 text-xs font-medium text-info transition-colors hover:bg-[var(--info-soft-strong)]"
+              >
+                <Icon name="Download" size={14} className="mr-1" />
+                去下载
+              </a>
+            )}
+          </div>
         </Section>
 
         <div className="flex items-center gap-3 pb-6">

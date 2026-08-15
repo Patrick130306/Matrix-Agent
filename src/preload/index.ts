@@ -113,8 +113,12 @@ const api = {
       saveFlowAs?: string;
       collectFields?: string[];
     }) => invoke<Task>(IPC.tasksCreate, input),
-    createBatch: (input: { name: string; requiresAuth: boolean; profileIds: string[] }) =>
-      invoke<Task>(IPC.tasksCreateBatch, input),
+    createBatch: (input: {
+      name: string;
+      requiresAuth: boolean;
+      profileIds: string[];
+      autoCreate?: { prefix: string; count: number };
+    }) => invoke<Task>(IPC.tasksCreateBatch, input),
     list: () => invoke<(Task & { steps: TaskStep[] })[]>(IPC.tasksList),
     get: (id: string) => invoke<(Task & { steps: TaskStep[] }) | null>(IPC.tasksGet, id),
     cancel: (id: string) => invoke(IPC.tasksCancel, id),
@@ -144,6 +148,10 @@ const api = {
   },
   system: {
     detectChrome: () => invoke(IPC.systemDetectChrome),
+    checkUpdate: () =>
+      invoke<{ current: string; latest: string; hasUpdate: boolean; url: string; notes?: string; error?: string }>(
+        IPC.systemCheckUpdate,
+      ),
   },
   events: {
     onTaskEvent: (cb: (e: TaskEvent) => void) => subscribe(EVT.taskEvent, cb),

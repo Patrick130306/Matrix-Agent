@@ -55,6 +55,7 @@ import {
 import { computeNextRun } from './schedule-runner';
 import { decryptString, encryptString } from './secure-store';
 import { detectSystemChrome } from './chrome-locator';
+import { checkForUpdate, currentVersion } from './update-checker';
 import { checkProfileProxy, checkProxyConfig, type ProxyConfig } from './proxy-checker';
 import { addProxyEntries, checkAllProxies, parseProxyList } from './proxy-pool';
 import { suggestFingerprint } from './geo';
@@ -382,13 +383,37 @@ export function registerIpcHandlers(deps: IpcDeps, bridge: HumanConfirmBridge): 
     const task = getTask(id);
     return task ? { ...task, steps: listTaskSteps(id) } : null;
   });
-  // 批量任务：一条指令 × N 个 Profile
+  // 批量任务：一条指令 × N 个 Profile；可选 autoCreate 自动补足环境（从代理池创建）
   ipcMain.handle(
     IPC.tasksCreateBatch,
-    (_e, input: { name: string; requiresAuth: boolean; profileIds: string[] }) => {
+    async (
+      _e,
+      input: {
+        name: string;
+        requiresAuth: boolean;
+        profileIds: string[];
+        autoCreate?: { prefix: string; count: number }; // 保证至少 count 个环境，不足自动创建
+      },
+    ) => {
       if (!input.name?.trim()) throw new Error('任务指令不能为空');
-      if (!input.profileIds?.length) throw new Error('批量任务至少选择一个 Profile');
-      return deps.scheduler.submitBatch(input.name.trim(), input.requiresAuth, input.profileIds);
+      if (!input.profileIds?.length && !input.autoCreate) throw new Error('批量任务至少选择一个 Profile');
+
+      let profileIds = input.profileIds ?? [];
+      // 自动补环境：现有 Profile 不够则用代理池按需创建补齐（名称前缀 + 数量）
+      if (input.autoCreate && input.autoCreate.count > 0) {
+        const want = Math.min(50, Math.max(1, Math.floor(input.autoCreate.count)));
+        if (profileIds.length < want) {
+          const pool = listProxyPool();
+          const poolIds = pool.length > 0 ? pool.map((e) => e.id) : undefined;
+          const r = await deps.profiles.batchCreate(
+            { prefix: input.autoCreate.prefix || '自动', count: want - profileIds.length, poolIds },
+            getSettings(),
+          );
+          profileIds = [...profileIds, ...r.profiles.map((p) => p.id)];
+        }
+      }
+      if (profileIds.length === 0) throw new Error('批量任务至少选择一个 Profile（自动创建失败：代理池为空）');
+      return deps.scheduler.submitBatch(input.name.trim(), input.requiresAuth, profileIds);
     },
   );
 
@@ -543,4 +568,8 @@ export function registerIpcHandlers(deps: IpcDeps, bridge: HumanConfirmBridge): 
     detected: detectSystemChrome(),
     current: getSettings().chromeExecutablePath ?? null,
   }));
+  ipcMain.handle(IPC.systemCheckUpdate, async () => {
+    const r = await checkForUpdate();
+    return r ?? { current: currentVersion(), latest: '', hasUpdate: false, url: '', error: '网络不可达' };
+  });
 }

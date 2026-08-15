@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Profile, ProfileGroup, Task, TaskStep, TaskTemplate } from '@shared/types';
 import { matrix } from '../api';
-import { Button, Card, CheckCircle, EmptyState, PageHeader, Segmented, StatusBadge, inputCls } from '../components/ui';
+import { Button, Card, CheckCircle, EmptyState, Field, PageHeader, Segmented, StatusBadge, inputCls } from '../components/ui';
 import { Icon } from '../components/icons';
 import { promptDialog, toast } from '../components/feedback';
 
@@ -103,6 +103,9 @@ function TaskComposer(props: { profiles: Profile[]; groups: ProfileGroup[]; onCr
   const [submitting, setSubmitting] = useState(false);
   const [batchMode, setBatchMode] = useState(false); // 多选 Profile 时：批量（各跑一遍）vs 协同（单任务切换）
   const [saveFlow, setSaveFlow] = useState(false); // 完成后把动作序列存为可回放流程
+  const [autoCreate, setAutoCreate] = useState(false); // 批量任务自动补足环境（从代理池创建）
+  const [autoCount, setAutoCount] = useState(5);
+  const [autoPrefix, setAutoPrefix] = useState('自动环境');
   const [templates, setTemplates] = useState<TaskTemplate[]>([]);
 
   useEffect(() => {
@@ -128,9 +131,18 @@ function TaskComposer(props: { profiles: Profile[]; groups: ProfileGroup[]; onCr
     setSubmitting(true);
     try {
       if (batchMode && selectedIds.length > 1) {
-        // 批量任务：一条指令 × N 个 Profile，结果自动汇总
-        await matrix.tasks.createBatch({ name: name.trim(), requiresAuth, profileIds: selectedIds });
-        toast.success(`已派发到 ${selectedIds.length} 个 Profile，结果自动汇总`);
+        // 批量任务：一条指令 × N 个 Profile，结果自动汇总；可自动补足环境
+        await matrix.tasks.createBatch({
+          name: name.trim(),
+          requiresAuth,
+          profileIds: selectedIds,
+          autoCreate: autoCreate ? { prefix: autoPrefix.trim() || '自动环境', count: autoCount } : undefined,
+        });
+        toast.success(
+          autoCreate && selectedIds.length < autoCount
+            ? `已派发（现有 ${selectedIds.length} 个，将自动创建 ${autoCount - selectedIds.length} 个新环境）`
+            : `已派发到 ${selectedIds.length} 个 Profile，结果自动汇总`,
+        );
       } else {
         await matrix.tasks.create({
           name: name.trim(),
@@ -276,6 +288,34 @@ function TaskComposer(props: { profiles: Profile[]; groups: ProfileGroup[]; onCr
               value={batchMode ? 'batch' : 'coop'}
               onChange={(v) => setBatchMode(v === 'batch')}
             />
+          </div>
+        )}
+        {batchMode && selectedIds.length > 1 && (
+          <div className="space-y-2.5 rounded-[10px] border border-[var(--line-2)] px-3.5 py-3">
+            <div
+              className="flex cursor-pointer items-center gap-2 text-[13px] text-slate-400"
+              onClick={() => setAutoCreate(!autoCreate)}
+            >
+              <CheckCircle size={16} checked={autoCreate} />
+              自动补足环境（Profile 不足 N 个时，自动从代理池创建补齐）
+            </div>
+            {autoCreate && (
+              <div className="grid grid-cols-2 gap-3 pl-6">
+                <Field label="目标环境数 N">
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    className={inputCls}
+                    value={autoCount}
+                    onChange={(e) => setAutoCount(Math.min(50, Math.max(1, Number(e.target.value) || 1)))}
+                  />
+                </Field>
+                <Field label="新环境名称前缀">
+                  <input className={inputCls} value={autoPrefix} onChange={(e) => setAutoPrefix(e.target.value)} placeholder="自动环境" />
+                </Field>
+              </div>
+            )}
           </div>
         )}
         <div className="flex items-center gap-2 pt-1">

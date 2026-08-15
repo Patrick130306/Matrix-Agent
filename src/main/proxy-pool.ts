@@ -11,7 +11,7 @@
  */
 import crypto from 'node:crypto';
 import type { Profile, ProxyPoolEntry, ProxyPoolEntryInput, ProxyType } from '@shared/types';
-import { PROXY_CHECK_CONCURRENCY } from '@shared/constants';
+import { PROXY_CHECK_CONCURRENCY, PROXY_POOL_AUTO_ID } from '@shared/constants';
 import { getProxyEntry, listProxyPool, upsertProxyEntry } from './db';
 import { checkProxyConfig } from './proxy-checker';
 import { decryptString, encryptString } from './secure-store';
@@ -130,13 +130,30 @@ export async function checkAllProxies(settings: Settings): Promise<{ ok: number;
   return { ok, fail, total: entries.length };
 }
 
-/** 为 Profile 解析出最终代理配置（优先池内分配；未设置池则用自身配置）。 */
+/** 池绑定特殊值：Profile.proxyPoolId = POOL_AUTO_ID 表示绑定整个池，每次启动自动轮换取可用代理 */
+export const POOL_AUTO_ID = PROXY_POOL_AUTO_ID;
+
+/**
+ * 为 Profile 解析出最终代理配置：
+ * - proxyPoolId = POOL_AUTO_ID：绑定整个池，LRU 轮换取一条可用代理（任务间自动换 IP）；
+ * - proxyPoolId = 具体条目 id：固定用该条（失败时自动换池内其他可用）；
+ * - 未设置池：用自身 proxyType/host/port 配置。
+ */
 export function resolveProxyConfig(
   profile: Profile,
 ): { server: string; username?: string; password?: string } | undefined {
   if (profile.proxyPoolId) {
-    const entry = pickFromPool(profile.proxyPoolId);
+    let entry: ProxyPoolEntry | null = null;
+    if (profile.proxyPoolId === POOL_AUTO_ID) {
+      entry = pickFromPool(); // 整池轮换
+    } else {
+      entry = getProxyEntry(profile.proxyPoolId);
+      if (entry && entry.status === 'fail') entry = pickFromPool(); // 固定条失效 → 池内换可用
+    }
     if (entry) {
+      // 分配后记录使用时间（LRU 轮换依据）
+      entry.lastAssignedAt = new Date().toISOString();
+      upsertProxyEntry(entry);
       return {
         server: `${entry.type}://${entry.host}:${entry.port}`,
         username: entry.username || undefined,
@@ -156,15 +173,32 @@ export function resolveProxyConfig(
   };
 }
 
-/** 从池中取一个可用条目：优先 ok（最近验证），其次 unknown（未验证过，尝试性使用）。 */
-function pickFromPool(poolId: string): ProxyPoolEntry | null {
+/** 浏览器启动失败时标记该代理不可用（下次分配自动跳过；供调度器在启动失败后调用并换一条重试） */
+export function markProxyFailed(poolId: string, error: string): void {
   const entry = getProxyEntry(poolId);
-  if (entry) return entry; // 单条池：直接用该条
-  // 池 = 全部条目（poolId 为 '__all__' 时）——见 ProfileForm 的约定；这里兼容：
+  if (!entry) return;
+  entry.status = 'fail';
+  entry.lastError = error.slice(0, 200);
+  entry.checkedAt = new Date().toISOString();
+  upsertProxyEntry(entry);
+}
+
+/**
+ * 从池中按 LRU 取可用代理：优先 status=ok（最近验证），其次 unknown（未验证过，尝试性使用）；
+ * 同一优先级内选 lastAssignedAt 最旧（闲置最久）的，实现任务间自动轮换。
+ */
+function pickFromPool(): ProxyPoolEntry | null {
   const all = listProxyPool();
   if (all.length === 0) return null;
   const ok = all.filter((e) => e.status === 'ok');
-  const candidates = ok.length > 0 ? ok : all.filter((e) => e.status === 'unknown');
+  const unknown = all.filter((e) => e.status === 'unknown');
+  const candidates = ok.length > 0 ? ok : unknown;
   if (candidates.length === 0) return null;
-  return candidates[Math.floor(Math.random() * candidates.length)];
+  // 闲置最久优先（lastAssignedAt 最旧 / 从未分配过的排最前）
+  candidates.sort((a, b) => {
+    const ta = a.lastAssignedAt ? new Date(a.lastAssignedAt).getTime() : 0;
+    const tb = b.lastAssignedAt ? new Date(b.lastAssignedAt).getTime() : 0;
+    return ta - tb;
+  });
+  return candidates[0];
 }
