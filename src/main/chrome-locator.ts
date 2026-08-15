@@ -1,11 +1,12 @@
 /**
- * 浏览器内核解析（§15 Chromium 策略 v2：内置 Chromium 随包分发）。
- * 优先级：用户指定路径 → 自动检测系统 Chrome → 内置 Chromium（打包资源 / dev 用 playwright 缓存）。
- * 内置 Chromium 保证开箱即用（无系统 Chrome 也能跑）；cookie 存各 Profile 独立 userDataDir，与内核无关。
+ * 浏览器内核解析（§15 Chromium 策略 v3：应用内按需下载）。
+ * 优先级：用户指定路径 → 自动检测系统 Chrome → 用户下载的 Chromium（{userData}/chromium/，选最新）→ dev playwright 缓存。
+ * 安装包不内置内核；无系统 Chrome 的机器可在设置页一键下载（Google 官方源直连）。
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
+import { chromiumRoot, listInstalledChromium } from './chromium-manager';
 
 /** dev 模式 playwright 缓存中的内置 Chromium（revision 1228，已验证兼容 playwright-core 1.54） */
 const BUNDLED_REVISION = 'chromium-1228';
@@ -17,15 +18,16 @@ function firstExisting(candidates: (string | undefined)[]): string | null {
   return null;
 }
 
-/** 内置 Chromium：打包后位于 resources/chromium/；开发模式直接复用 playwright 缓存 */
-function detectBundledChromium(): string | null {
-  const resourcesPath = (process as unknown as { resourcesPath?: string }).resourcesPath;
-  const candidates = [
-    resourcesPath && path.join(resourcesPath, 'chromium', 'chrome-win64', 'chrome.exe'),
-    process.env.LOCALAPPDATA &&
-      path.join(process.env.LOCALAPPDATA, 'ms-playwright', BUNDLED_REVISION, 'chrome-win64', 'chrome.exe'),
-  ];
-  return firstExisting(candidates);
+/** 用户下载的 Chromium：{userData}/chromium/{version}/chrome-win64/chrome.exe（多个版本取最新） */
+function detectDownloadedChromium(): string | null {
+  try {
+    const installed = listInstalledChromium();
+    if (installed.length === 0) return null;
+    const exe = path.join(chromiumRoot(), installed[0], 'chrome-win64', 'chrome.exe');
+    return fs.existsSync(exe) ? exe : null;
+  } catch {
+    return null;
+  }
 }
 
 function detectWindows(): string | null {
@@ -87,9 +89,18 @@ export function detectSystemChrome(): string | null {
 
 /**
  * 解析最终 executablePath。
- * 优先级：用户指定 → 系统 Chrome → 内置 Chromium；全找不到返回 undefined（由 playwright 兜底并报错提示）。
+ * 优先级：用户指定 → 系统 Chrome → 用户下载的 Chromium → dev playwright 缓存；全找不到返回 undefined（由 playwright 兜底并报错提示）。
  */
 export function resolveChromeExecutable(userSpecified?: string): string | undefined {
   if (userSpecified && fs.existsSync(userSpecified)) return userSpecified;
-  return detectSystemChrome() ?? detectBundledChromium() ?? undefined;
+  return (
+    detectSystemChrome() ??
+    detectDownloadedChromium() ??
+    (process.env.LOCALAPPDATA
+      ? firstExisting([
+          path.join(process.env.LOCALAPPDATA, 'ms-playwright', BUNDLED_REVISION, 'chrome-win64', 'chrome.exe'),
+        ])
+      : null) ??
+    undefined
+  );
 }

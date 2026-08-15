@@ -153,6 +153,22 @@ const api = {
         IPC.systemCheckUpdate,
       ),
   },
+  chromium: {
+    list: () =>
+      invoke<
+        {
+          version: string;
+          label: string;
+          sizeMB: number;
+          status:
+            | { installed: true; executable: string }
+            | { installed: false; downloading?: { received: number; total: number; status: string; error?: string } };
+          active: boolean;
+        }[]
+      >(IPC.chromiumList),
+    download: (version: string) => invoke<{ ok: boolean; executable?: string }>(IPC.chromiumDownload, version),
+    remove: (version: string) => invoke<{ ok: boolean }>(IPC.chromiumRemove, version),
+  },
   events: {
     onTaskEvent: (cb: (e: TaskEvent) => void) => subscribe(EVT.taskEvent, cb),
     onHumanConfirm: (cb: (req: HumanConfirmRequest) => void) =>

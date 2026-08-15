@@ -3,6 +3,7 @@ import { matrix } from '../api';
 import { Button, Card, Field, PageHeader, Segmented, Toggle, inputCls } from '../components/ui';
 import { Icon } from '../components/icons';
 import { ProxyPoolPanel } from '../components/ProxyPoolPanel';
+import { ChromiumManagerPanel } from '../components/ChromiumManagerPanel';
 
 interface SettingsView {
   llmBaseUrl: string;
@@ -170,6 +171,10 @@ export function SettingsPage() {
             checked={view.headless}
             onChange={(v) => set('headless', v)}
           />
+          <div className="border-t border-[var(--line-1)] pt-4">
+            <p className="mb-2 text-[13px] font-medium text-slate-300">Chromium 内核（按需下载，安装包不内置）</p>
+            <ChromiumManagerPanel />
+          </div>
         </Section>
 
         <Section title="Agent">

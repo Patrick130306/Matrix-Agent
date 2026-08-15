@@ -56,6 +56,13 @@ import { computeNextRun } from './schedule-runner';
 import { decryptString, encryptString } from './secure-store';
 import { detectSystemChrome } from './chrome-locator';
 import { checkForUpdate, currentVersion } from './update-checker';
+import {
+  CHROMIUM_VERSIONS,
+  downloadChromium,
+  getChromiumStatus,
+  listInstalledChromium,
+  removeChromium,
+} from './chromium-manager';
 import { checkProfileProxy, checkProxyConfig, type ProxyConfig } from './proxy-checker';
 import { addProxyEntries, checkAllProxies, parseProxyList } from './proxy-pool';
 import { suggestFingerprint } from './geo';
@@ -571,5 +578,26 @@ export function registerIpcHandlers(deps: IpcDeps, bridge: HumanConfirmBridge): 
   ipcMain.handle(IPC.systemCheckUpdate, async () => {
     const r = await checkForUpdate();
     return r ?? { current: currentVersion(), latest: '', hasUpdate: false, url: '', error: '网络不可达' };
+  });
+
+  // ---------------------------------------------------------------- chromium 内核管理
+  ipcMain.handle(IPC.chromiumList, () => {
+    const installed = new Set(listInstalledChromium());
+    return CHROMIUM_VERSIONS.map((v) => ({
+      version: v.version,
+      label: v.label,
+      sizeMB: v.sizeMB,
+      status: getChromiumStatus(v.version),
+      active: installed.size > 0 ? installed.has(v.version) && v.version === [...installed][0] : false,
+    }));
+  });
+  // 下载（阻塞直到完成；进度经 {version}.downloading.json 供 UI 轮询）
+  ipcMain.handle(IPC.chromiumDownload, async (_e, version: string) => {
+    const exe = await downloadChromium(version);
+    return { ok: true, executable: exe };
+  });
+  ipcMain.handle(IPC.chromiumRemove, (_e, version: string) => {
+    removeChromium(version);
+    return { ok: true };
   });
 }

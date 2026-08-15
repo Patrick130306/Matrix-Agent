@@ -74,6 +74,10 @@ export const IPC = {
   // system
   systemDetectChrome: 'system:detect-chrome',
   systemCheckUpdate: 'system:check-update', // 检查 GitHub Release 新版本
+  // chromium 内核管理（应用内按需下载）
+  chromiumList: 'chromium:list',
+  chromiumDownload: 'chromium:download', // 下载指定版本（进度写 {version}.downloading.json，UI 轮询）
+  chromiumRemove: 'chromium:remove', // 删除指定版本内核
 } as const;
 
 /** 主进程 → 渲染进程 事件通道 */
