@@ -29,6 +29,7 @@ export default function App() {
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [groups, setGroups] = useState<ProfileGroup[]>([]);
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
   const refresh = useCallback(() => {
     void matrix.tasks.list().then((t) => setTasks(t as TaskRow[]));
@@ -36,13 +37,22 @@ export default function App() {
     void matrix.groups.list().then(setGroups);
   }, []);
 
-  // 主题：读设置并应用到 documentElement（亮色 = html.light，覆盖 :root 变量）
+  // 主题：启动时读设置并应用到 documentElement（亮色 = html.light，覆盖 :root 变量）
   useEffect(() => {
     void matrix.settings.get().then((s) => {
-      const light = (s as { theme?: string }).theme === 'light';
-      document.documentElement.classList.toggle('light', light);
+      const t = (s as { theme?: 'dark' | 'light' }).theme === 'light' ? 'light' : 'dark';
+      setTheme(t);
+      document.documentElement.classList.toggle('light', t === 'light');
     });
   }, []);
+
+  // 左下角快捷切换：亮色显示太阳（点按切暗），暗色显示月亮（点按切亮），即时生效并持久化
+  const toggleTheme = () => {
+    const next: 'dark' | 'light' = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    document.documentElement.classList.toggle('light', next === 'light');
+    void matrix.settings.set({ theme: next }).catch(() => undefined);
+  };
 
   useEffect(() => {
     refresh();
@@ -92,8 +102,17 @@ export default function App() {
             </li>
           ))}
         </ul>
-        <div className="border-t border-ink-600 px-5 py-3 text-xs leading-4 text-slate-600">
-          MVP v3.0 · 指纹浏览器 × AI Agent
+        <div className="flex items-center justify-between border-t border-ink-600 px-4 py-3">
+          <span className="text-xs leading-4 text-slate-600">MVP v3.0</span>
+          <button
+            type="button"
+            title={theme === 'dark' ? '切换到亮色主题' : '切换到暗色主题'}
+            aria-label={theme === 'dark' ? '切换到亮色主题' : '切换到暗色主题'}
+            onClick={toggleTheme}
+            className="flex h-6 w-6 items-center justify-center rounded-md text-slate-500 transition-colors duration-150 ease-out hover:bg-[var(--fill-1)] hover:text-slate-200 active:scale-95"
+          >
+            <Icon name={theme === 'dark' ? 'Moon' : 'Sun'} size={16} />
+          </button>
         </div>
       </nav>
 
